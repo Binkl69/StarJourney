@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>StarJourney</title>
+<meta name="description" content="StarJourney: you are the Meridian's control panel. Balance the reactor, build rooms, explore derelicts by drone and fight on radar, 1980s-style.">
+<meta name="theme-color" content="#1b1a17">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=Oswald:wght@500;600;700&display=swap">
+<style>
+/* StarJourney · the Meridian's control panel, built like 1980s flight hardware:
+   warm grey plastic, beige label plates, chunky switches, green and amber phosphor screens. */
+:root{
+  color-scheme:dark;
+  --room:#141311; --plastic:#34322d; --plastic-hi:#46433c; --plastic-lo:#22211d; --seam:#0e0d0b;
+  --plate:#d9cfb4; --plate-ink:#2a2620; --plate-edge:#a89e83;
+  --grn:#6dff8a; --grn-dim:#1f7a35; --grn-bg:#031607;
+  --amb:#ffb347; --amb-dim:#8a5a14; --amb-bg:#170c00;
+  --red:#d9352b; --yel:#e8b21c; --blu:#2f6fb5; --wht:#e8e2d2;
+  --f-crt:"VT323","Courier New",ui-monospace,monospace; --f-lbl:"Oswald","Arial Narrow",Impact,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html{background:var(--room)}
+body{margin:0;min-height:100%;background:radial-gradient(ellipse at 50% 0%,#24221e,var(--room) 70%);color:var(--wht);font:16px/1.2 var(--f-lbl);
+  padding-inline:10px;padding-block:calc(8px + env(safe-area-inset-top,0px)) calc(10px + env(safe-area-inset-bottom,0px));user-select:none;-webkit-user-select:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:2px dashed var(--yel);outline-offset:2px}
+
+/* ── The console shell ── */
+.console{max-width:1180px;margin:0 auto;display:grid;gap:8px;grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "mon" "term" "act" "read" "pow" "tape"}
+.bank{position:relative;background:
+  repeating-linear-gradient(90deg,rgba(255,255,255,.012) 0 2px,rgba(0,0,0,.02) 2px 4px),
+  linear-gradient(180deg,var(--plastic-hi),var(--plastic) 30%,var(--plastic-lo));
+  border:1px solid var(--seam);border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 -2px 0 rgba(0,0,0,.35),0 3px 0 #0a0908,0 6px 14px rgba(0,0,0,.5);padding:10px}
+.bank::before,.bank::after{content:"";position:absolute;width:7px;height:7px;border-radius:50%;top:5px;background:radial-gradient(circle at 35% 35%,#8a857a,#3a3731 60%,#1b1a17);box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.bank::before{left:5px}.bank::after{right:5px}
+.plate{display:inline-block;background:linear-gradient(#e2d9bf,var(--plate));color:var(--plate-ink);font:600 10.5px/1 var(--f-lbl);letter-spacing:.14em;text-transform:uppercase;padding:3px 6px 2px;border-radius:2px;box-shadow:inset 0 -1px 0 var(--plate-edge),0 1px 0 rgba(0,0,0,.5)}
+.a-top{grid-area:top;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px}
+.brand{font:700 17px/1 var(--f-lbl);letter-spacing:.16em;text-transform:uppercase;color:var(--plate);margin-right:auto;text-shadow:0 1px 0 #000}
+.brand small{font-weight:500;font-size:10px;letter-spacing:.2em;color:#9d9583;margin-left:6px}
+.lamps{display:flex;gap:6px;flex-wrap:wrap}
+.lamp{font:600 9.5px/1 var(--f-lbl);letter-spacing:.12em;padding:4px 6px;border-radius:2px;background:#2a1b17;color:#6b4b43;border:1px solid #0c0a09;box-shadow:inset 0 1px 2px rgba(0,0,0,.6)}
+.lamp.on{background:#ff4a38;color:#2a0500;box-shadow:0 0 10px #ff4a38,inset 0 1px 0 rgba(255,255,255,.5)}
+.lamp.on.warn{background:#ffc02e;box-shadow:0 0 10px #ffc02e}
+.lamp.blink{animation:blink .7s steps(2,jump-none) infinite}
+@keyframes blink{50%{opacity:.4}}
+
+/* ── CRT monitors ── */
+.a-mon{grid-area:mon;display:flex;flex-direction:column;gap:8px}
+.crt{position:relative;border-radius:14px;overflow:hidden;background:var(--grn-bg);border:10px solid #0b0b0a;
+  box-shadow:0 0 0 2px #45423a,0 0 0 4px #1a1916,inset 0 0 40px rgba(0,0,0,.9);aspect-ratio:1/1;max-height:58vh;width:100%}
+.crt.amber{background:var(--amb-bg)}
+.crt canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.crt .fx{position:absolute;inset:0;pointer-events:none;border-radius:6px;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.28) 0 1px,transparent 1px 3px),radial-gradient(ellipse at center,rgba(255,255,255,.04) 0%,rgba(0,0,0,.55) 100%);
+  animation:flick 4s steps(40) infinite}
+@keyframes flick{0%,100%{opacity:1}50%{opacity:.93}}
+.crt .glass{position:absolute;inset:0;pointer-events:none;background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(255,255,255,0) 35%)}
+.crt-label{position:absolute;left:12px;top:8px;font:22px/1 var(--f-crt);color:var(--grn);text-shadow:0 0 6px var(--grn);letter-spacing:.06em;pointer-events:none}
+.crt.amber .crt-label{color:var(--amb);text-shadow:0 0 6px var(--amb)}
+.crt-info{position:absolute;right:12px;top:8px;font:20px/1 var(--f-crt);color:var(--grn);opacity:.8;pointer-events:none;text-align:right}
+.crt.amber .crt-info{color:var(--amb)}
+#shipgrid{position:absolute;inset:40px 16px 16px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;font-family:var(--f-crt)}
+.cell{border:2px solid var(--grn-dim);color:var(--grn);background:rgba(109,255,138,.04);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-shadow:0 0 6px var(--grn);min-height:0}
+.cell b{font:28px/1 var(--f-crt);font-weight:400}
+.cell span{font:17px/1 var(--f-crt);opacity:.85;text-align:center}
+.cell.empty{border-style:dashed;opacity:.55}
+.cell.sel{border-color:var(--grn);box-shadow:0 0 12px rgba(109,255,138,.5),inset 0 0 12px rgba(109,255,138,.2)}
+.cell.off span{color:#ff6b4a;text-shadow:0 0 6px #ff6b4a}
+.buildmenu{position:absolute;inset:40px 16px 16px;background:rgba(3,22,7,.96);border:2px solid var(--grn);display:flex;flex-direction:column;gap:4px;padding:8px;overflow-y:auto;font:20px/1.1 var(--f-crt);color:var(--grn);text-shadow:0 0 5px var(--grn)}
+.buildmenu button{display:flex;justify-content:space-between;gap:8px;text-align:left;padding:4px 6px;border:1px solid var(--grn-dim);font:20px/1.1 var(--f-crt);color:var(--grn)}
+.buildmenu button:hover:not(:disabled),.buildmenu button:focus-visible{background:rgba(109,255,138,.15)}
+.buildmenu button:disabled{opacity:.35}
+.buildmenu p{margin:0 0 4px;font:18px/1.15 var(--f-crt);opacity:.9}
+.selector{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.sel-btn{font:600 12px/1 var(--f-lbl);letter-spacing:.14em;padding:10px 0 9px;border-radius:4px;color:#ddd4bd;
+  background:linear-gradient(#5a564d,#3b3832);border:1px solid #0d0c0a;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 3px 0 #0b0a09;position:relative}
+.sel-btn::after{content:"";position:absolute;top:4px;right:6px;width:6px;height:6px;border-radius:50%;background:#1d2a1f}
+.sel-btn.on{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 1px 0 #0b0a09}
+.sel-btn.on::after{background:var(--grn);box-shadow:0 0 6px var(--grn)}
+.sel-btn.alert::after{background:#ff4a38;box-shadow:0 0 6px #ff4a38;animation:blink .6s steps(2,jump-none) infinite}
+.sel-btn:disabled{opacity:.45}
+
+/* ── Action cluster (changes with the monitor) ── */
+.a-act{grid-area:act;display:flex;flex-wrap:wrap;align-items:center;gap:10px;min-height:74px}
+.a-act .info{flex:1 1 180px;font:20px/1.1 var(--f-crt);color:var(--amb);text-shadow:0 0 5px rgba(255,179,71,.6);background:var(--amb-bg);border:3px solid #0b0b0a;border-radius:6px;padding:6px 9px;min-height:52px}
+.big{font:700 14px/1 var(--f-lbl);letter-spacing:.14em;text-transform:uppercase;padding:14px 16px 12px;border-radius:5px;color:#fff;border:1px solid #0b0a09;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 4px 0 #0b0a09;min-width:84px}
+.big:active:not(:disabled){transform:translateY(3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 #0b0a09}
+.big:disabled{filter:grayscale(.8) brightness(.55)}
+.big.red{background:linear-gradient(#e2493e,#a8231b)} .big.yel{background:linear-gradient(#f2c640,#b88408);color:#2a1a00} .big.blu{background:linear-gradient(#4a86cf,#1f4f8f)} .big.grn{background:linear-gradient(#58c46b,#22793a)}
+.big.ready{animation:ready 1s ease-in-out infinite alternate}
+@keyframes ready{to{box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 4px 0 #0b0a09,0 0 18px currentColor}}
+.charge{flex:1 1 140px;display:flex;flex-direction:column;gap:4px}
+.bar{height:14px;border-radius:2px;background:#0b0b0a;border:1px solid #000;box-shadow:inset 0 1px 3px rgba(0,0,0,.8);position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:repeating-linear-gradient(90deg,var(--grn) 0 6px,transparent 6px 8px);box-shadow:0 0 8px var(--grn);width:0}
+.bar.sling b{position:absolute;top:0;bottom:0;left:40%;width:20%;background:rgba(109,255,138,.35);box-shadow:0 0 8px var(--grn)}
+.bar.sling i{width:4px;margin-left:-2px;background:var(--amb);box-shadow:0 0 8px var(--amb)}
+.bar.amb i{background:repeating-linear-gradient(90deg,var(--amb) 0 6px,transparent 6px 8px);box-shadow:0 0 8px var(--amb)}
+.dpad{display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,44px);gap:3px}
+.dpad button{background:linear-gradient(#5a564d,#35322c);border:1px solid #0b0a09;border-radius:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 3px 0 #0b0a09;font:20px/1 var(--f-crt);color:#e8e2d2}
+.dpad button:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 #0b0a09}
+.dpad button:disabled{opacity:.4}
+.dpad .up{grid-column:2}.dpad .lt{grid-column:1;grid-row:2}.dpad .rt{grid-column:3;grid-row:2}.dpad .dn{grid-column:2;grid-row:3}
+.dpad .mid{grid-column:2;grid-row:2;background:#1a1916;box-shadow:inset 0 2px 4px #000}
+.layers{display:flex;gap:4px}
+.layers i{width:14px;height:14px;border-radius:50%;background:#10231a;border:1px solid #000}
+.layers i.on{background:var(--grn);box-shadow:0 0 8px var(--grn)}
+
+/* ── Readouts (segment displays) ── */
+.a-read{grid-area:read;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:8px 10px}
+.seg{display:flex;flex-direction:column;align-items:center;gap:3px}
+.seg .win{width:100%;text-align:center;background:#150605;border:3px solid #0b0b0a;border-radius:4px;box-shadow:inset 0 2px 6px #000;font:34px/1 var(--f-crt);color:#ff5a3c;text-shadow:0 0 8px rgba(255,90,60,.8);padding:2px 0 0;letter-spacing:.06em}
+.seg.ok .win{color:var(--grn);text-shadow:0 0 8px rgba(109,255,138,.7);background:#041006}
+.seg.low .win{animation:blink .8s steps(2,jump-none) infinite}
+
+/* ── Power bank: reactor, heat, coolant, scram, faders ── */
+.a-pow{grid-area:pow;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:stretch}
+.reactor{display:flex;flex-direction:column;align-items:center;gap:6px;padding-right:12px;border-right:2px groove #1c1b18}
+.knob{width:96px;height:96px;touch-action:none;cursor:ns-resize}
+.knobrow{display:flex;gap:6px;align-items:center}
+.knobrow button{width:32px;height:28px;border-radius:4px;background:linear-gradient(#5a564d,#35322c);border:1px solid #0b0a09;box-shadow:0 2px 0 #0b0a09;font:20px/1 var(--f-crt)}
+.led{font:30px/1 var(--f-crt);color:var(--amb);text-shadow:0 0 8px var(--amb);background:var(--amb-bg);border:2px solid #0b0b0a;border-radius:3px;padding:1px 8px 0;min-width:40px;text-align:center}
+.gauge{width:108px;height:62px}
+.minirow{display:flex;gap:10px;align-items:flex-end}
+.toggle{display:flex;flex-direction:column;align-items:center;gap:4px}
+.lever{width:26px;height:44px;border-radius:13px;background:linear-gradient(90deg,#15140f,#2e2c27,#15140f);border:1px solid #000;position:relative;box-shadow:inset 0 2px 5px #000}
+.lever::after{content:"";position:absolute;left:3px;width:18px;height:22px;border-radius:9px;background:linear-gradient(#f0ead8,#a39a84);box-shadow:0 2px 3px #000;top:19px;transition:top .12s}
+.lever.on::after{top:2px}
+.lever.on{box-shadow:inset 0 2px 5px #000,0 0 10px rgba(109,255,138,.5)}
+.scram{position:relative;width:56px;height:56px}
+.scram .btn{position:absolute;inset:6px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#ff6a5c,#b4241a 70%);border:2px solid #000;box-shadow:0 3px 0 #000;font:700 9px/1 var(--f-lbl);letter-spacing:.08em;color:#fff}
+.scram .cover{position:absolute;inset:0;border-radius:8px;background:repeating-linear-gradient(45deg,#e8b21c 0 7px,#1a1814 7px 14px);border:2px solid #000;opacity:.92;transform-origin:top;transition:transform .2s;font:700 9px/1 var(--f-lbl);color:#000}
+.scram.open .cover{transform:perspective(200px) rotateX(75deg)}
+.faders{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;min-width:0}
+.fader{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.fader .track{position:relative;width:100%;max-width:52px;height:132px;border-radius:4px;background:#11100e;border:1px solid #000;box-shadow:inset 0 2px 6px #000;touch-action:none;cursor:ns-resize}
+.fader .slot{position:absolute;left:50%;top:8px;bottom:8px;width:4px;margin-left:-2px;background:#000;border-radius:2px}
+.fader .cap{position:absolute;left:12%;right:12%;height:18px;border-radius:3px;background:linear-gradient(#f1ebd9,#9d947e);border:1px solid #000;box-shadow:0 2px 3px #000;transition:bottom .12s}
+.fader .cap::after{content:"";position:absolute;left:10%;right:10%;top:8px;height:2px;background:#333}
+.fader .ladder{position:absolute;right:3px;top:8px;bottom:8px;width:6px;display:flex;flex-direction:column-reverse;gap:3px}
+.fader .ladder i{flex:1;border-radius:1px;background:#1b2a1d}
+.fader .ladder i.on{background:var(--grn);box-shadow:0 0 5px var(--grn)}
+.fader .ladder i.brown{background:#ffb347;box-shadow:0 0 5px #ffb347}
+.fader .plate{font-size:9px;letter-spacing:.04em;padding:3px 2px 2px;max-width:100%;overflow:hidden}
+.fader.none{opacity:.35}
+.fader.none .track{cursor:not-allowed}
+.fader .val{font:20px/1 var(--f-crt);color:var(--grn);text-shadow:0 0 5px var(--grn)}
+.fader.short .val{color:var(--amb);text-shadow:0 0 5px var(--amb)}
+.supply{grid-column:1 / -1;display:flex;align-items:center;gap:10px;border-top:2px groove #1c1b18;padding-top:8px}
+.supply .bar{flex:1}
+.supply .txt{font:20px/1 var(--f-crt);color:var(--grn);min-width:120px;text-align:right}
+.supply.over .txt{color:#ff5a3c;text-shadow:0 0 6px #ff5a3c}
+
+/* ── Terminal ── */
+.a-term{grid-area:term;padding:8px}
+.term{background:var(--amb-bg);border:6px solid #0b0b0a;border-radius:8px;box-shadow:inset 0 0 24px #000;padding:8px 10px;height:118px;overflow:hidden;font:20px/1.15 var(--f-crt);color:var(--amb);text-shadow:0 0 5px rgba(255,179,71,.6);display:flex;flex-direction:column;justify-content:flex-end;position:relative}
+.term::after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.3) 0 1px,transparent 1px 3px)}
+.term p{margin:0 0 2px}
+.term p.old{opacity:.55}
+.term p.alert{color:#ff6b4a;text-shadow:0 0 6px #ff6b4a}
+.term p.grn{color:var(--grn);text-shadow:0 0 6px var(--grn)}
+.cursor{display:inline-block;width:.55em;height:.9em;background:var(--amb);vertical-align:-2px;animation:blink 1s steps(2,jump-none) infinite}
+
+/* ── Tape deck ── */
+.a-tape{grid-area:tape;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.deck{display:flex;align-items:center;gap:10px;flex:1 1 260px}
+.cassette{position:relative;width:150px;height:92px;flex:none;border-radius:6px;background:linear-gradient(#1c1b18,#0e0d0b);border:2px solid #000;box-shadow:inset 0 0 0 3px #2c2a25}
+.cassette .label{position:absolute;left:10px;right:10px;top:8px;height:24px;background:linear-gradient(#efe6cc,#d7ccaf);border-radius:2px;font:15px/24px var(--f-crt);color:#2a2620;text-align:center;overflow:hidden;white-space:nowrap}
+.cassette .label::after{content:"";position:absolute;left:0;right:0;bottom:3px;height:3px;background:repeating-linear-gradient(90deg,#d9352b 0 12px,#e8b21c 12px 24px,#2f6fb5 24px 36px)}
+.cassette .win{position:absolute;left:28px;right:28px;bottom:12px;height:40px;border-radius:20px;background:#07120a;border:2px solid #000;display:flex;justify-content:space-between;align-items:center;padding:0 10px}
+.reel{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle,#eee 0 3px,#3a3731 4px 8px,#1b1a17 9px);border:2px dashed #8b8474}
+.deck.playing .reel{animation:spin 1.2s linear infinite}
+.deck.new .cassette{box-shadow:inset 0 0 0 3px #2c2a25,0 0 14px rgba(109,255,138,.6)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.deck-btns{display:flex;gap:6px}
+.deck-btns button{width:46px;height:42px;border-radius:4px;background:linear-gradient(#d9d1bb,#a39a84);border:1px solid #000;box-shadow:0 4px 0 #0b0a09,inset 0 1px 0 #fff;color:#2a2620;font:20px/1 var(--f-crt)}
+.deck-btns button:active{transform:translateY(3px);box-shadow:0 1px 0 #0b0a09}
+.deck .led{font-size:22px}
+.switches{display:flex;gap:12px;align-items:flex-end;margin-left:auto}
+.degauss{font:600 10px/1 var(--f-lbl);letter-spacing:.14em;padding:10px 10px 8px;border-radius:4px;background:linear-gradient(#5a564d,#35322c);border:1px solid #000;box-shadow:0 3px 0 #0b0a09;color:#ddd4bd}
+.degauss:active{transform:translateY(2px)}
+.crt.degauss{animation:degauss .9s ease-out}
+@keyframes degauss{0%{filter:hue-rotate(0) saturate(1);transform:none}10%{filter:hue-rotate(160deg) saturate(3) blur(1px);transform:scale(1.03) skewX(3deg)}30%{filter:hue-rotate(-120deg) saturate(2.5);transform:scale(.98) skewX(-2deg)}55%{filter:hue-rotate(60deg) saturate(1.6);transform:scale(1.01) skewX(1deg)}100%{filter:none;transform:none}}
+.crt.poweron canvas{animation:poweron .7s ease-out}
+@keyframes poweron{0%{transform:scaleY(.01) scaleX(.3);filter:brightness(4)}40%{transform:scaleY(.02) scaleX(1);filter:brightness(3)}100%{transform:none;filter:none}}
+.big.grey{background:linear-gradient(#5a564d,#35322c)}
+
+/* ── Dot-matrix printout ── */
+.paper{width:100%;max-width:560px;background:
+  radial-gradient(circle at 14px 50%,#141311 0 5px,transparent 6px) left top/28px 28px repeat-y,
+  radial-gradient(circle at calc(100% - 14px) 50%,#141311 0 5px,transparent 6px) right top/28px 28px repeat-y,
+  repeating-linear-gradient(#f4f1e6 0 28px,#e6efdc 28px 56px);
+  padding:22px 40px 26px;box-shadow:0 10px 30px rgba(0,0,0,.6);border-left:1px dashed #b8b2a0;border-right:1px dashed #b8b2a0;display:flex;flex-direction:column;gap:12px}
+.paper .feed{font:21px/28px var(--f-crt);color:#222;white-space:pre-wrap;letter-spacing:.04em}
+.paper .feed p{margin:0;animation:inkin .15s steps(3)}
+@keyframes inkin{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+
+/* ── Boot & end screens: a full-size CRT ── */
+.ov{position:fixed;inset:0;z-index:40;background:rgba(10,9,8,.86);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
+.ov .crt{aspect-ratio:auto;max-height:none;max-width:680px;padding:22px 22px 20px;display:flex;flex-direction:column;gap:12px;font:22px/1.2 var(--f-crt);color:var(--grn);text-shadow:0 0 6px var(--grn)}
+.ov .crt.amber{color:var(--amb);text-shadow:0 0 6px var(--amb)}
+.ov h1{margin:0;font:48px/1 var(--f-crt);font-weight:400;letter-spacing:.04em}
+.ov p{margin:0}
+.ov .boot{white-space:pre-wrap;min-height:7em;opacity:.9}
+.ov .go{align-self:flex-start;margin-top:6px}
+.ov ul{margin:0;padding-left:20px}
+
+@media (min-width:980px){
+  .console{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);grid-template-areas:"top top" "mon read" "mon pow" "act term" "tape term"}
+  .crt{max-height:none;aspect-ratio:4/3}
+}
+@media (max-width:420px){
+  .faders{gap:3px} .fader .track{height:112px} .knob{width:84px;height:84px}
+  .seg .win{font-size:28px}
+  .a-pow{gap:8px} .reactor{padding-right:8px}
+  .term{height:98px}
+}
+@media (prefers-reduced-motion:reduce){.crt .fx,.lamp.blink,.seg.low .win,.big.ready,.cursor,.sel-btn.alert::after{animation:none}}
+</style>
+</head>
+<body>
+<div class="console">
+  <header class="bank a-top">
+    <div class="brand">Meridian · Ship Control <small>MK II · 1984</small></div>
+    <div class="lamps" aria-label="Warning lamps">
+      <span class="lamp" id="lOvl">OVERLOAD</span><span class="lamp" id="lHeat">HEAT</span><span class="lamp" id="lO2">O₂</span><span class="lamp" id="lHull">HULL</span><span class="lamp" id="lScram">SCRAM</span><span class="lamp" id="lFire">FIRE</span>
+    </div>
+  </header>
+
+  <section class="bank a-mon">
+    <div class="crt" id="crt">
+      <canvas id="scope" aria-label="Main monitor"></canvas>
+      <div id="shipgrid" hidden></div>
+      <div class="crt-label" id="crtLabel">NAV SCOPE</div>
+      <div class="crt-info" id="crtInfo"></div>
+      <div class="fx"></div><div class="glass"></div>
+    </div>
+    <div class="selector" role="tablist" aria-label="Monitor select">
+      <button class="sel-btn on" data-mode="nav" type="button">NAV</button>
+      <button class="sel-btn" data-mode="ship" type="button">SHIP</button>
+      <button class="sel-btn" data-mode="drone" type="button">DRONE</button>
+      <button class="sel-btn" data-mode="radar" type="button">RADAR</button>
+    </div>
+    <div class="switches"><div class="toggle"><button class="lever on" id="voice" type="button" aria-pressed="true" aria-label="Ship's voice"></button><span class="plate">Voice</span></div><button class="degauss" id="degauss" type="button">DEGAUSS</button></div>
+  </section>
+
+  <section class="bank a-act" id="actions" aria-live="polite"></section>
+
+  <section class="bank a-read">
+    <div class="seg" id="rHull"><span class="plate">Hull</span><div class="win">20</div></div>
+    <div class="seg" id="rFuel"><span class="plate">Fuel</span><div class="win">8</div></div>
+    <div class="seg" id="rO2"><span class="plate">O₂</span><div class="win">100</div></div>
+    <div class="seg ok" id="rScrap"><span class="plate">Scrap</span><div class="win">10</div></div>
+  </section>
+
+  <section class="bank a-pow">
+    <div class="reactor">
+      <span class="plate">Reactor output</span>
+      <svg class="knob" id="knob" viewBox="0 0 100 100" role="slider" aria-label="Reactor output" tabindex="0"></svg>
+      <div class="knobrow"><button type="button" id="kDn" aria-label="Lower reactor output">◀</button><div class="led" id="kVal">4</div><button type="button" id="kUp" aria-label="Raise reactor output">▶</button></div>
+      <span class="plate">Core heat</span>
+      <svg class="gauge" id="heat" viewBox="0 0 108 62" aria-label="Core heat"></svg>
+      <div class="minirow">
+        <div class="toggle"><button class="lever" id="cool" type="button" aria-pressed="false" aria-label="Coolant pump"></button><span class="plate">Coolant</span></div>
+        <div class="toggle"><div class="scram" id="scram"><button class="btn" type="button" id="scramBtn">SCRAM</button><button class="cover" type="button" id="scramCover" aria-label="Lift the SCRAM cover">LIFT</button></div><span class="plate">Scram</span></div>
+      </div>
+    </div>
+    <div class="faders" id="faders"></div>
+    <div class="supply" id="supply"><span class="plate">Load</span><div class="bar"><i id="loadBar"></i></div><span class="txt" id="loadTxt">0 / 4</span></div>
+  </section>
+
+  <section class="bank a-term"><div class="term" id="term" aria-live="polite"></div></section>
+
+  <section class="bank a-tape" aria-label="Tape deck">
+    <div class="deck">
+      <div class="cassette" aria-hidden="true"><div class="label" id="tapeLbl">NO TAPE</div><div class="win"><span class="reel"></span><span class="reel"></span></div></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><span class="plate">Tape deck</span><div class="deck-btns"><button type="button" id="tPlay" aria-label="Play tape">▶</button><button type="button" id="tStop" aria-label="Stop tape">■</button><button type="button" id="tNext" aria-label="Next tape">⏏</button></div><div class="led" id="tapeCount">0/3</div></div>
+    </div>
+  </section>
+</div>
+
+<div class="ov" id="ovBoot">
+  <div class="crt">
+    <h1>MERIDIAN SHIP CONTROL</h1>
+    <div class="boot" id="bootText"></div>
+    <ul>
+      <li>YOU ARE THE CONTROL PANEL. THE CREW DO THE REST.</li>
+      <li>TURN THE REACTOR UP FOR POWER. TOO HIGH AND IT OVERHEATS.</li>
+      <li>SLIDE THE FADERS TO SHARE POWER BETWEEN SYSTEMS.</li>
+      <li>BUILD ROOMS ON THE SHIP SCREEN. EXPLORE WRECKS WITH THE DRONE.</li>
+      <li>FIRES AND BREACHES SHOW ON THE SHIP SCREEN: SEND CREW OR VENT THE ROOM.</li>
+      <li>FIND CASSETTE TAPES IN WRECKS. PLAY THEM ON THE TAPE DECK.</li>
+      <li>TAP ANY BODY ON THE NAV SCOPE AND BURN. EVERYTHING ORBITS, SO TIMING MATTERS.</li>
+      <li>THE ENG FADER IS YOUR THROTTLE: FASTER COSTS MORE FUEL. SLINGSHOT PAST BRANN FOR FREE SPEED.</li>
+      <li>LAND ON HALCYON, THE AMBER WORLD NEAR THE STAR.</li>
+    </ul>
+    <button class="big grn go" id="powerOn" type="button">Power on</button>
+  </div>
+</div>
+<div class="ov" id="ovEnd" hidden></div>
+
+<script src="data.js"></script>
+<script src="console.js"></script>
+</body>
+</html>
