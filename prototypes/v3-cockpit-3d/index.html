@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>StarJourney</title>
-<meta name="description" content="StarJourney: fly the ISV Meridian through painted space. Steer, route power, patch the hull and survive five legs to Halcyon.">
+<meta name="description" content="StarJourney: fly the ISV Meridian from the cockpit. Steer, route power, patch the hull and survive five legs to Halcyon.">
 <meta name="theme-color" content="#050608">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <style>
-/* StarJourney · 2D top-down flight with the cockpit dash below. One world: the Meridian at night. */
+/* StarJourney · Cockpit. One world: the Meridian's flight deck at night. */
 :root{
   color-scheme:dark;
   --bg:#050608; --metal:#1a1e25; --metal-2:#262b34; --metal-hi:#3a414d; --line:#2c323c;
@@ -29,16 +29,16 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 /* ── The window ── */
 #window{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;cursor:crosshair}
-#world{position:absolute;inset:0;width:100%;height:100%;display:block}
+#world,#glass{position:absolute;inset:0;width:100%;height:100%;display:block}
+#glass{pointer-events:none;mix-blend-mode:screen}
 #o2haze{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 30%,rgba(6,10,40,.95) 95%);transition:opacity .6s}
 #flash{position:absolute;inset:0;pointer-events:none;opacity:0}
 #flash.hit{background:radial-gradient(ellipse at center,rgba(255,60,40,.1),rgba(255,40,30,.75))}
 #flash.flare{background:radial-gradient(ellipse at 20% 10%,#fff 0%,rgba(255,230,170,.95) 40%,rgba(255,160,60,.7) 100%)}
-/* Scanner bezel around the view */
-.bezel{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(94,230,224,.12),inset 0 0 40px rgba(0,0,0,.6)}
-.bezel::before,.bezel::after{content:"";position:absolute;width:22px;height:22px;border:2px solid var(--o);opacity:.8}
-.bezel::before{top:calc(8px + env(safe-area-inset-top,0px));left:8px;border-right:0;border-bottom:0}
-.bezel::after{bottom:8px;right:8px;border-left:0;border-top:0}
+body.boosting #world{filter:saturate(1.15) contrast(1.05)}
+/* Canopy frame: struts that hold the glass */
+.frame{position:absolute;inset:0;pointer-events:none;width:100%;height:100%}
+.glare{position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,rgba(255,255,255,.07) 0%,rgba(255,255,255,0) 22%,rgba(255,255,255,0) 70%,rgba(255,255,255,.04) 85%,rgba(255,255,255,0) 100%)}
 
 /* HUD painted on the glass */
 .hud{position:absolute;inset:0;pointer-events:none;font-family:var(--f-mono);color:var(--c);text-shadow:0 0 6px rgba(94,230,224,.6)}
@@ -47,7 +47,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .bar{width:100%;height:4px;background:rgba(94,230,224,.18);position:relative}
 #prog{position:absolute;left:0;top:0;bottom:0;background:var(--c);box-shadow:0 0 8px var(--c);width:0}
 .topline small{font-size:10.5px;letter-spacing:.14em;opacity:.85}
-.spd{position:absolute;right:14px;top:calc(46px + env(safe-area-inset-top,0px));text-align:right;font-size:10px;letter-spacing:.14em}
+.reticle{position:absolute;left:50%;top:50%;width:92px;height:92px;transform:translate(-50%,-50%);opacity:.75}
+.spd{position:absolute;right:8%;top:50%;transform:translateY(-50%);text-align:right;font-size:10px;letter-spacing:.14em}
 .spd b{display:block;font:600 22px/1 var(--f-mono);letter-spacing:0}
 .warns{position:absolute;top:22%;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px}
 .warn{font:700 12px/1 var(--f-ui);letter-spacing:.2em;padding:6px 10px;border:1px solid currentColor;background:rgba(40,8,6,.55);color:var(--red);text-shadow:none;animation:blink .8s steps(2,jump-none) infinite}
@@ -57,7 +58,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .toast{font:700 14px/1 var(--f-ui);letter-spacing:.14em;animation:rise 1.4s ease-out forwards}
 .toast.c{color:var(--c)} .toast.w{color:var(--w)} .toast.o{color:var(--o);text-shadow:0 0 6px rgba(255,122,46,.6)} .toast.r{color:var(--red);text-shadow:0 0 6px rgba(255,75,75,.6)}
 @keyframes rise{0%{opacity:0;transform:translateY(8px)}15%{opacity:1}100%{opacity:0;transform:translateY(-26px)}}
-#comms{position:absolute;left:12px;top:calc(62px + env(safe-area-inset-top,0px));max-width:min(420px,70%);padding:8px 11px;background:rgba(4,14,16,.72);border-left:2px solid var(--o);font:500 12.5px/1.45 var(--f-mono);color:#dff7f6;text-shadow:none;opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s}
+#comms{position:absolute;left:4%;bottom:6%;max-width:min(420px,70%);padding:8px 11px;background:rgba(4,14,16,.72);border-left:2px solid var(--o);font:500 12.5px/1.45 var(--f-mono);color:#dff7f6;text-shadow:none;opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s}
 #comms.on{opacity:1;transform:none}
 #comms b{color:var(--o);font-weight:600;margin-right:6px;text-transform:uppercase;letter-spacing:.1em}
 #knob{position:absolute;width:96px;height:96px;margin:-48px 0 0 -48px;border:1.5px solid rgba(94,230,224,.45);border-radius:50%;opacity:0;pointer-events:none;transition:opacity .15s}
@@ -146,6 +147,7 @@ body.alarm .lamps i:nth-child(2){animation-delay:.25s}
 .stats div{border-top:1px solid #23414a;padding-top:6px}
 .stats span{display:block;font:500 9.5px/1.2 var(--f-mono);letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
 .stats b{font:600 20px/1.2 var(--f-mono)}
+#nogl{position:fixed;inset:0;display:grid;place-items:center;padding:24px;text-align:center;font:500 14px/1.5 var(--f-mono);color:var(--dim)}
 
 /* Phone portrait: stacked dashboard, big thumbs */
 @media (max-width:700px){
@@ -159,19 +161,36 @@ body.alarm .lamps i:nth-child(2){animation-delay:.25s}
   .pw button{height:34px}
   .shop,.how{grid-template-columns:minmax(0,1fr)}
   .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .spd{right:5%}
+  .reticle{width:72px;height:72px}
 }
 @media (prefers-reduced-motion:reduce){.warn,.gauge.crit,body.alarm .lamps i,.toast{animation:none}}
 </style>
 </head>
 <body>
 <div class="deck">
-  <div id="window" aria-label="Flight view. Drag to steer.">
+  <div id="window" aria-label="Cockpit window. Drag to steer.">
     <canvas id="world"></canvas>
     <div id="o2haze"></div>
+    <canvas id="glass" aria-hidden="true"></canvas>
     <div id="flash"></div>
-    <div class="bezel"></div>
+    <div class="glare"></div>
+    <svg class="frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="strut" x1="0" x2="1"><stop offset="0" stop-color="#0b0d10"/><stop offset=".55" stop-color="#262b34"/><stop offset="1" stop-color="#101216"/></linearGradient>
+        <linearGradient id="strutR" x1="1" x2="0"><stop offset="0" stop-color="#0b0d10"/><stop offset=".55" stop-color="#262b34"/><stop offset="1" stop-color="#101216"/></linearGradient>
+        <linearGradient id="sill" y1="0" y2="1"><stop offset="0" stop-color="#2a3039"/><stop offset="1" stop-color="#0d0f13"/></linearGradient>
+      </defs>
+      <path d="M0 0 H100 V3 Q50 6.5 0 3 Z" fill="#0c0e12"/>
+      <path d="M0 0 L7 0 L16 100 L0 100 Z" fill="url(#strut)"/>
+      <path d="M100 0 L93 0 L84 100 L100 100 Z" fill="url(#strutR)"/>
+      <path d="M0 94 Q50 88 100 94 V100 H0 Z" fill="url(#sill)"/>
+      <path d="M7 0 L16 100" stroke="#ff7a2e" stroke-opacity=".5" stroke-width=".25" vector-effect="non-scaling-stroke"/>
+      <path d="M93 0 L84 100" stroke="#ff7a2e" stroke-opacity=".5" stroke-width=".25" vector-effect="non-scaling-stroke"/>
+    </svg>
     <div class="hud">
       <div class="topline"><div id="legName">—</div><div class="bar"><div id="prog"></div></div><small>WAYPOINT <span id="dist">—</span></small></div>
+      <svg class="reticle" viewBox="0 0 100 100" aria-hidden="true"><g fill="none" stroke="#5ee6e0" stroke-width="1.6"><circle cx="50" cy="50" r="22" stroke-dasharray="10 6"/><path d="M50 8 V20 M50 80 V92 M8 50 H20 M80 50 H92"/><circle cx="50" cy="50" r="2" fill="#5ee6e0"/></g></svg>
       <div class="spd">KM/H<b id="spd">0</b></div>
       <div class="warns"><div class="warn" id="warnLeak" hidden>O₂ LEAK · PATCH</div><div class="warn amber" id="warnFlare" hidden></div><div class="warn" id="warnRad" hidden>RADIATION</div><div class="warn amber" id="warnFuel" hidden>FUEL EMPTY · COASTING</div></div>
       <div id="toasts"></div>
@@ -207,7 +226,7 @@ body.alarm .lamps i:nth-child(2){animation-delay:.25s}
     <h2>StarJourney</h2>
     <p class="lede">Halcyon is five legs away. You're in the pilot's seat. Keep the Meridian flying, keep the crew breathing, and bring her down in one piece.</p>
     <ul class="how">
-      <li><b>Steer</b>Drag anywhere in space above the dash. (Keyboard: arrows / WASD)</li>
+      <li><b>Steer</b>Drag anywhere in the window. (Keyboard: arrows / WASD)</li>
       <li><b>Boost</b>Hold the round button. Burns fuel 3× faster. (Shift)</li>
       <li><b>Route power</b>Engines = speed. Shields = less damage. Life = slower O₂ loss.</li>
       <li><b>Patch</b>Spend a salvaged part to fix the hull or seal a leak. (E)</li>
@@ -217,7 +236,9 @@ body.alarm .lamps i:nth-child(2){animation-delay:.25s}
     <button class="go" id="launch" type="button">Launch</button>
   </div>
 </div>
+<div id="nogl" hidden>This game needs WebGL (3D graphics), which this browser or device has turned off.</div>
 
+<script src="vendor/three.min.js"></script>
 <script src="legs.js"></script>
 <script src="flight.js"></script>
 </body>

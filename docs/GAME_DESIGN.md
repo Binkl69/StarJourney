@@ -1,4 +1,8 @@
-# StarJourney — Game Design (v0.3)
+# StarJourney — Game Design (v0.4)
+
+> **v0.4 (product owner): no 3D.** Chosen: **2D top-down + cockpit dash.** You look down on a painted Meridian flying up the screen through nebulae, rock fields, storm cells and wrecks; the instrument dash (hull/fuel/O₂ gauges, power routing, PATCH, BOOST) sits below. All v0.3 gameplay carries over unchanged (`legs.js` is shared). Rendering is plain 2D canvas with sprites painted in code, particles, parallax stars and a passing planet; on wide screens the play area is a centred phone-shaped lane. The 3D cockpit is archived in `prototypes/v3-cockpit-3d/`.
+
+# v0.3 (history)
 
 > **v0.3 direction (product owner, after playing v2):** *Gameplay is the ship and survival; story is secondary. The look must be rich, not minimalist. The player is the ship's steering wheel, not the crew's babysitter.* Chosen: **cockpit view, phone-first.**
 >
