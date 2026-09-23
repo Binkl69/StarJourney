@@ -135,6 +135,10 @@ Each milestone ends with something you can open and play/click.
 
 **Playtest gate after M7:** is one run fun? If not, fix the loop before adding content.
 
+**Change of plan (agreed):** instead of polishing one milestone at a time, we built a **rough but complete run first** (`index.html` + `game.js` + `content.js`): crew & loadout pick, seeded branching map, 20 event cards with story flags, 3 timed crises, repairs, permadeath, descent and 5 endings, plus a per-browser memorial wall. Milestones M2–M8 now mean *deepening* each piece, driven by playtesting.
+
+**Files:** `content.js` holds everything a writer touches (crew, events, crises, endings). `game.js` is the rules engine. Adding a story card never requires touching the engine.
+
 ## 11. Names
 
 - **Ship: ISV *Meridian*** — a meridian is a line you navigate by; also sounds like a ship people would trust with their lives. Crew call her "Merry" (the humour half of the tone).

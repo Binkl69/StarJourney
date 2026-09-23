@@ -3,202 +3,215 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Meridian Control</title>
-<meta name="description" content="StarJourney prototype M1: the Meridian Control dashboard for the ISV Meridian's journey to Halcyon. All data simulated.">
+<title>StarJourney</title>
+<meta name="description" content="StarJourney prototype: guide the ISV Meridian from Earth to Halcyon from Meridian Control. Every run a different route, story and landing.">
 <meta name="theme-color" content="#0d1116">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;1,400&display=swap">
 <style>
-/* StarJourney · M1 dashboard shell. Single deliberate dark world (a control room has no light mode). */
+/* StarJourney · playable prototype. One deliberate dark world: a control room has no light mode. */
 :root{
   color-scheme: dark;
-  --bg:#0d1116;        /* room */
-  --panel:#12171e;     /* console slate */
-  --panel-2:#171d26;
-  --line:#232b36;
+  --bg:#0d1116; --panel:#12171e; --panel-2:#171d26; --line:#232b36;
   --grid:rgba(94,230,224,.045);
-  --t:#e9e7e2;         /* off-white numerals */
-  --dim:#8a919b;
-  --dim2:#586070;
-  --o:#ff7a2e;         /* safety orange: brackets, headers */
-  --c:#5ee6e0;         /* data cyan */
-  --amber:#ffb300;     /* caution */
-  --red:#ff4d4d;       /* warning */
-  --green:#5fd68a;     /* nominal */
+  --t:#e9e7e2; --dim:#8a919b; --dim2:#586070;
+  --o:#ff7a2e; --c:#5ee6e0; --amber:#ffb300; --red:#ff4d4d; --green:#5fd68a;
   --f-display:"Chakra Petch","Arial Narrow",system-ui,sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
   --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 *{box-sizing:border-box}
-html,body{min-height:100%}
+[hidden]{display:none!important}
 body{
   margin:0;background:var(--bg);color:var(--t);font:14px/1.45 var(--f-body);
-  background-image:
-    linear-gradient(var(--grid) 1px,transparent 1px),
-    linear-gradient(90deg,var(--grid) 1px,transparent 1px);
-  background-size:24px 24px;
-  padding-inline:16px;padding-block:12px 24px;
-  -webkit-font-smoothing:antialiased;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:24px 24px;padding-inline:16px;padding-block:12px 24px;-webkit-font-smoothing:antialiased;
 }
 .wrap{max-width:1480px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:disabled{cursor:not-allowed}
 :focus-visible{outline:2px solid var(--c);outline-offset:2px}
 .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 
-/* ── Header ─────────────────────────────── */
-.hdr{
-  display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px;
-  background:var(--panel);border:1px solid var(--line);padding:10px 14px;position:relative;
-}
+/* Header */
+.hdr{display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px;background:var(--panel);border:1px solid var(--line);padding:10px 14px}
 .brand{display:flex;align-items:center;gap:12px;margin-right:auto;min-width:0}
-.patch{width:46px;height:46px;flex:none}
+.patch{width:44px;height:44px;flex:none}
 .brand h1{margin:0;font:700 20px/1.05 var(--f-display);letter-spacing:.06em;text-transform:uppercase}
 .brand h1 span{color:var(--o)}
 .brand p{margin:2px 0 0;font:500 11px/1.3 var(--f-mono);color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
 .readout{display:flex;flex-direction:column;gap:1px;min-width:0}
 .readout .k{font:500 10px/1 var(--f-mono);color:var(--dim);letter-spacing:.14em;text-transform:uppercase}
 .readout .v{font:600 20px/1.15 var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
-.readout .v.o{color:var(--o)}
-.clockbtn{text-align:left;border:1px solid var(--line);padding:4px 8px;background:var(--panel-2)}
-.clockbtn:hover{border-color:var(--dim2)}
-.clockbtn .k::after{content:" ⇄";color:var(--dim2)}
+.readout .v.o{color:var(--o)} .readout .v.late{color:var(--amber)}
 .ctrls{display:flex;align-items:center;gap:10px}
-.sndbtn{border:1px solid var(--line);padding:8px 10px;font:600 11px/1 var(--f-mono);letter-spacing:.12em;color:var(--dim);background:var(--panel-2)}
-.sndbtn[aria-pressed="true"]{color:var(--c);border-color:rgba(94,230,224,.4)}
-.mc{
-  width:92px;height:52px;border-radius:4px;display:grid;place-items:center;text-align:center;
-  font:700 11px/1.1 var(--f-display);letter-spacing:.1em;color:#3a2a10;
-  background:linear-gradient(#3b2c12,#2a200d);border:2px solid #0a0c10;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1px #3a3f48,0 2px 0 #06080b;
-}
-.mc.on{color:#1d1200;background:radial-gradient(circle at 50% 40%,#ffd36a,var(--amber) 55%,#c77f00);box-shadow:0 0 18px rgba(255,179,0,.55),0 0 0 1px #3a3f48,0 2px 0 #06080b}
-.mc.on.flash{animation:mcflash .9s steps(2,jump-none) infinite}
-@keyframes mcflash{50%{filter:brightness(.45);box-shadow:0 0 4px rgba(255,179,0,.2),0 0 0 1px #3a3f48}}
+.sbtn{border:1px solid var(--line);padding:8px 10px;font:600 11px/1 var(--f-mono);letter-spacing:.12em;color:var(--dim);background:var(--panel-2);text-transform:uppercase}
+.sbtn:hover{border-color:var(--dim2);color:var(--t)}
+.sbtn[aria-pressed="true"]{color:var(--c);border-color:rgba(94,230,224,.4)}
+.mc{width:88px;height:50px;border-radius:4px;display:grid;place-items:center;text-align:center;font:700 11px/1.1 var(--f-display);letter-spacing:.1em;color:#3a2a10;
+  background:linear-gradient(#3b2c12,#2a200d);border:2px solid #0a0c10;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1px #3a3f48,0 2px 0 #06080b;cursor:default}
+.mc.on{color:#1d1200;background:radial-gradient(circle at 50% 40%,#ffd36a,var(--amber) 55%,#c77f00);box-shadow:0 0 18px rgba(255,179,0,.55),0 0 0 1px #3a3f48,0 2px 0 #06080b;animation:mcflash .9s steps(2,jump-none) infinite}
+.mc.red{background:radial-gradient(circle at 50% 40%,#ff9a9a,var(--red) 55%,#9e1d1d);box-shadow:0 0 18px rgba(255,77,77,.55),0 0 0 1px #3a3f48}
+@keyframes mcflash{50%{filter:brightness(.45)}}
 
-/* ── Panels ─────────────────────────────── */
+/* Panels */
 .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}
-.p{
-  --bk:var(--o);
-  position:relative;background:var(--panel);border:1px solid var(--line);
-  padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px;min-width:0;
-}
-.p::before,.p::after,.p>.bk::before,.p>.bk::after{
-  content:"";position:absolute;width:12px;height:12px;border:2px solid var(--bk);pointer-events:none;
-}
+.p{--bk:var(--o);position:relative;background:var(--panel);border:1px solid var(--line);padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.p::before,.p::after,.p>.bk::before,.p>.bk::after{content:"";position:absolute;width:12px;height:12px;border:2px solid var(--bk);pointer-events:none}
 .p::before{top:-1px;left:-1px;border-right:0;border-bottom:0}
 .p::after{top:-1px;right:-1px;border-left:0;border-bottom:0}
 .p>.bk::before{bottom:-1px;left:-1px;border-right:0;border-top:0}
 .p>.bk::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
-.p.alert{--bk:var(--amber)}
+.p.hot{--bk:var(--c)} .p.alert{--bk:var(--amber)}
 .ph{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .ph b{font:600 11px/1 var(--f-mono);color:var(--o);letter-spacing:.08em}
 .ph h2{margin:0;font:600 13px/1.2 var(--f-display);letter-spacing:.12em;text-transform:uppercase;margin-right:auto}
-.chip{font:600 10px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;padding:4px 6px;border:1px solid currentColor;color:var(--dim)}
-.chip.ok{color:var(--green)} .chip.c{color:var(--c)} .chip.warn{color:var(--amber)} .chip.o{color:var(--o)}
-.chip .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:5px;vertical-align:1px}
+.chip{font:600 10px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;padding:4px 6px;border:1px solid currentColor;color:var(--dim);white-space:nowrap}
+.chip.ok{color:var(--green)} .chip.c{color:var(--c)} .chip.warn{color:var(--amber)} .chip.bad{color:var(--red)}
 
 .a-route{grid-column:span 7}
-.a-tel{grid-column:span 5}
-.a-ship{grid-column:span 4}
-.a-subs{grid-column:span 3}
-.a-comms{grid-column:span 5}
-.a-crew{grid-column:span 12}
+.a-comms{grid-column:span 5;grid-row:span 2}
+.a-crew{grid-column:span 7}
+.a-ship{grid-column:span 12}
 
-/* Route map */
-.route svg{width:100%;height:auto;display:block}
-.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font:500 11px/1.2 var(--f-mono);color:var(--dim)}
-.legend span{display:inline-flex;align-items:center;gap:6px}
-.legend i{width:10px;height:10px;display:inline-block;border:1.5px solid var(--dim);transform:rotate(45deg)}
-.legend i.c{border-color:var(--c)} .legend i.o{border-color:var(--o);background:var(--o)}
-.routefoot{display:flex;flex-wrap:wrap;gap:6px 18px;font:500 12px/1.3 var(--f-mono);color:var(--dim)}
-.routefoot b{color:var(--t);font-weight:600}
+/* Route */
+#map{width:100%;height:auto;display:block;touch-action:manipulation}
+#map .node{cursor:default}
+#map .node.reach{cursor:pointer}
+#map .node.reach:hover .ring,#map .node.sel .ring{stroke-width:2.5}
+#map .node:focus{outline:none}
+#map .node:focus-visible .ring{stroke:var(--t)}
+.plan{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;border-top:1px solid var(--line);padding-top:10px;min-height:52px}
+.plan .txt{flex:1 1 240px;font:500 12.5px/1.45 var(--f-mono);color:var(--dim)}
+.plan .txt b{color:var(--t);font-weight:600}
+.plan .txt .risk{color:var(--amber)}
+.go{font:700 13px/1 var(--f-display);letter-spacing:.14em;text-transform:uppercase;padding:12px 18px;background:var(--o);color:#1a0d04;border:1px solid var(--o)}
+.go:hover{filter:brightness(1.1)}
+.go:disabled{background:transparent;color:var(--dim2);border-color:var(--line)}
+.lanes{display:flex;flex-wrap:wrap;gap:8px}
+.lanes:empty{display:none}
+.lane{display:flex;flex-direction:column;gap:2px;text-align:left;padding:9px 12px;border:1px solid rgba(94,230,224,.4);background:var(--panel-2);flex:1 1 150px;min-width:0}
+.lane:hover{border-color:var(--c)}
+.lane[aria-pressed="true"]{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c);background:#152028}
+.lane .n{font:600 13px/1.2 var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--c)}
+.lane .d{font:500 11px/1.3 var(--f-mono);color:var(--dim)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font:500 10.5px/1.3 var(--f-mono);color:var(--dim2);letter-spacing:.04em}
 
-/* Telemetry strips */
-.strips{display:flex;flex-direction:column;justify-content:space-between;gap:8px;flex:1}
-.strip{display:grid;grid-template-columns:92px minmax(0,1fr);gap:10px;align-items:stretch}
-.strip .lab{display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--line);padding-right:8px}
-.strip .lab .k{font:500 10px/1.2 var(--f-mono);color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
-.strip .lab .v{font:600 18px/1.2 var(--f-mono);font-variant-numeric:tabular-nums}
-.strip .lab .v small{font-size:11px;color:var(--dim);font-weight:500;margin-left:2px}
-.strip canvas{width:100%;height:64px;display:block;background:rgba(0,0,0,.18)}
-.strip.warn .lab .v{color:var(--amber)}
-
-/* Vehicle schematic */
-.ship svg{width:100%;height:auto;display:block}
-.shipstats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.stat{border-top:1px solid var(--line);padding-top:6px}
-.stat .k{font:500 10px/1.2 var(--f-mono);color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
-.stat .v{font:600 16px/1.3 var(--f-mono);font-variant-numeric:tabular-nums}
-
-/* Subsystems */
-.matrix{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-.lt{
-  display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:7px 7px 6px;
-  background:var(--panel-2);border:1px solid var(--line);text-align:left;min-width:0;
-}
-.lt:hover{border-color:var(--dim2)}
-.lt[aria-pressed="true"]{border-color:var(--c)}
-.lt .led{width:100%;height:5px;background:var(--green);box-shadow:0 0 8px rgba(95,214,138,.45)}
-.lt .n{font:600 10px/1.15 var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--t);overflow-wrap:anywhere}
-.lt.caution .led{background:var(--amber);box-shadow:0 0 10px rgba(255,179,0,.6)}
-.lt.caution .n{color:var(--amber)}
-.detail{border-top:1px solid var(--line);padding-top:8px;min-height:62px}
-.detail h3{margin:0 0 2px;font:600 12px/1.3 var(--f-display);letter-spacing:.1em;text-transform:uppercase}
-.detail p{margin:0;font:400 12px/1.45 var(--f-mono);color:var(--dim)}
-
-/* Comms log */
-.log{
-  list-style:none;margin:0;padding:0 4px 0 0;display:flex;flex-direction:column;gap:8px;
-  height:300px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent;
-}
-.log li{display:grid;grid-template-columns:64px minmax(0,1fr);gap:8px;font:400 12.5px/1.45 var(--f-mono);animation:rx .4s ease-out}
+/* Comms / event */
+.ev{background:var(--panel-2);border:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:10px}
+.ev.live{border-color:rgba(94,230,224,.45);box-shadow:0 0 0 1px rgba(94,230,224,.12),0 0 24px rgba(94,230,224,.06)}
+.evk{font:600 10px/1.2 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--c)}
+.ev h3{margin:0;font:600 19px/1.2 var(--f-display);letter-spacing:.03em;text-wrap:balance}
+.ev p{margin:0;font:400 14.5px/1.55 var(--f-body);max-width:62ch}
+.ev .out{color:var(--t)}
+.ev .next{font:500 12px/1.4 var(--f-mono);color:var(--dim)}
+.choices{display:flex;flex-direction:column;gap:8px}
+.ch{display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;padding:11px 12px;border:1px solid var(--dim2);background:var(--panel)}
+.ch:hover:not(:disabled){border-color:var(--c);background:#152028}
+.ch .l{font:600 14px/1.3 var(--f-body)}
+.ch .h{font:500 11px/1.3 var(--f-mono);color:var(--dim);text-align:right;flex:none;max-width:48%}
+.ch:disabled{opacity:.4}
+.log{list-style:none;margin:0;padding:0 4px 0 0;display:flex;flex-direction:column;gap:7px;flex:1;min-height:180px;max-height:420px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.log li{display:grid;grid-template-columns:48px minmax(0,1fr);gap:8px;font:400 12.5px/1.45 var(--f-mono)}
 .log time{color:var(--dim2)}
 .log .who{font-weight:600;color:var(--c);margin-right:6px}
-.log .who.sol{color:var(--o)} .log .who.sys{color:var(--amber)} .log .who.you{color:var(--t)}
-.log .msg{color:var(--t)}
-.log li.sys .msg{color:var(--amber)}
-@keyframes rx{from{opacity:.2;transform:translateY(4px)}}
-.delay{font:500 11px/1.3 var(--f-mono);color:var(--dim)}
-.delay b{color:var(--c);font-weight:600}
+.log .sol .who{color:var(--o)} .log .sys .who,.log .sys .msg{color:var(--amber)} .log .dead .who,.log .dead .msg{color:var(--red)} .log .you .who{color:var(--t)}
+.loghd{font:600 10px/1 var(--f-mono);letter-spacing:.14em;color:var(--dim);text-transform:uppercase;border-top:1px solid var(--line);padding-top:10px}
+
+/* Ship */
+.shipgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) minmax(0,1.3fr);gap:12px}
+.res{display:flex;flex-direction:column;gap:5px;min-width:0}
+.res .top{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.res .k{font:500 10px/1.2 var(--f-mono);color:var(--dim);letter-spacing:.12em;text-transform:uppercase}
+.res .v{font:600 22px/1.1 var(--f-mono);font-variant-numeric:tabular-nums}
+.res.low .v{color:var(--amber)} .res.crit .v{color:var(--red)}
+.res canvas{width:100%;height:40px;display:block;background:rgba(0,0,0,.2)}
+.res .act{font:600 10.5px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;padding:7px 8px;border:1px solid var(--line);color:var(--c);background:var(--panel-2);align-self:flex-start}
+.res .act:hover:not(:disabled){border-color:var(--c)}
+.res .act:disabled{color:var(--dim2)}
+.res .sub{font:500 10.5px/1.3 var(--f-mono);color:var(--dim2)}
+.systems{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;align-content:start}
+.sy{background:var(--panel-2);border:1px solid var(--line);padding:7px 8px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.sy .led{height:5px;background:var(--green);box-shadow:0 0 8px rgba(95,214,138,.45)}
+.sy.bad .led{background:var(--amber);box-shadow:0 0 10px rgba(255,179,0,.6)}
+.sy .n{font:600 10.5px/1.2 var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
+.sy.bad .n{color:var(--amber)}
+.sy .fx{font:400 10.5px/1.3 var(--f-mono);color:var(--dim)}
+.sy .act{font:600 10px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;padding:6px;border:1px solid rgba(255,179,0,.5);color:var(--amber);align-self:flex-start}
+.sy .act:disabled{color:var(--dim2);border-color:var(--line)}
 
 /* Crew */
-.crew{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.crew{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .cc{background:var(--panel-2);border:1px solid var(--line);padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.cc.dead{border-color:rgba(255,77,77,.35)}
 .cc header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .cc h3{margin:0;font:600 14px/1.2 var(--f-display);letter-spacing:.04em}
 .cc .role{font:500 10px/1.3 var(--f-mono);color:var(--dim);letter-spacing:.12em;text-transform:uppercase}
 .cc .hr{font:600 20px/1 var(--f-mono);color:var(--c);font-variant-numeric:tabular-nums;white-space:nowrap}
 .cc .hr small{font-size:10px;color:var(--dim);font-weight:500;margin-left:2px}
-.cc canvas{width:100%;height:48px;display:block;background:rgba(0,0,0,.25)}
-.vit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-.vit .k{font:500 9.5px/1.2 var(--f-mono);color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
-.vit .v{font:600 13px/1.3 var(--f-mono);font-variant-numeric:tabular-nums}
-.bar{height:4px;background:var(--line);margin-top:3px}
-.bar i{display:block;height:100%;background:var(--c)}
-.bar.hi i{background:var(--amber)}
-.quote{margin:0;font:italic 400 12px/1.4 var(--f-body);color:var(--dim);min-height:2.8em}
+.cc.dead .hr,.cc.dead h3{color:var(--red)}
+.cc canvas{width:100%;height:44px;display:block;background:rgba(0,0,0,.25)}
+.bars{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.bars .k{display:flex;justify-content:space-between;font:500 9.5px/1.2 var(--f-mono);color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+.bars .k span:last-child{color:var(--t);font-variant-numeric:tabular-nums}
+.bar{height:5px;background:var(--line);margin-top:4px}
+.bar i{display:block;height:100%;background:var(--c);transition:width .4s}
+.bar.hp i{background:var(--green)} .bar.hp.low i{background:var(--red)} .bar.st.hi i{background:var(--amber)}
+.quote{margin:0;font:italic 400 12px/1.4 var(--f-body);color:var(--dim)}
+
+/* Overlays */
+.ov{position:fixed;inset:0;z-index:20;background:rgba(6,8,11,.82);backdrop-filter:blur(3px);overflow-y:auto;
+  padding-inline:16px;padding-block:calc(24px + env(safe-area-inset-top,0px)) calc(24px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;align-items:flex-start}
+.sheet{width:100%;max-width:920px;margin-block:auto}
+.sheet .p{gap:14px;padding:18px}
+.kicker{font:600 11px/1.2 var(--f-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--o)}
+.sheet h2.big{margin:0;font:700 clamp(26px,5vw,40px)/1.05 var(--f-display);letter-spacing:.02em;text-wrap:balance}
+.sheet .lede{margin:0;font:400 15px/1.55 var(--f-body);color:var(--dim);max-width:62ch}
+.sheet h3.sec{margin:6px 0 0;font:600 12px/1.2 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.pick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.opt{display:flex;flex-direction:column;gap:4px;text-align:left;padding:11px 12px;border:1px solid var(--line);background:var(--panel-2);min-width:0}
+.opt:hover{border-color:var(--dim2)}
+.opt[aria-pressed="true"]{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c)}
+.opt .n{font:600 14px/1.25 var(--f-display);letter-spacing:.03em}
+.opt .r{font:500 10px/1.3 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--c)}
+.opt .d{font:italic 400 12px/1.4 var(--f-body);color:var(--dim)}
+.opt .stats{font:500 11px/1.4 var(--f-mono);color:var(--dim)}
+.launch{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;border-top:1px solid var(--line);padding-top:14px}
+.launch .note{flex:1 1 220px;font:500 12px/1.4 var(--f-mono);color:var(--dim)}
+.crisis .timer{height:8px;background:var(--line)}
+.crisis .timer i{display:block;height:100%;background:var(--amber)}
+.crisis .pw{font:600 13px/1.3 var(--f-mono);color:var(--amber)}
+.crisis .pw b{font-size:20px}
+.syspick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.syspick .opt[aria-pressed="true"]{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+.syspick .opt[aria-pressed="true"] .r{color:var(--amber)}
+.syspick .opt .d{font-style:normal;font-family:var(--f-mono);font-size:11px}
+.fate{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.fate div{border:1px solid var(--line);padding:9px 10px;background:var(--panel-2);font:500 12.5px/1.4 var(--f-mono)}
+.fate .lost{color:var(--red);border-color:rgba(255,77,77,.3)}
+.score{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.score div{border-top:1px solid var(--line);padding-top:6px}
+.score .k{font:500 10px/1.2 var(--f-mono);letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
+.score .v{font:600 20px/1.2 var(--f-mono);font-variant-numeric:tabular-nums}
+.list{margin:0;padding-left:18px;font:400 13.5px/1.55 var(--f-body);color:var(--dim)}
+.list li::marker{color:var(--o)}
 
 .foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;font:500 11px/1.4 var(--f-mono);color:var(--dim2);letter-spacing:.06em}
 
-/* ── Responsive ─────────────────────────── */
 @media (max-width:1100px){
-  .a-route,.a-tel{grid-column:span 12}
-  .a-ship{grid-column:span 6} .a-subs{grid-column:span 6} .a-comms{grid-column:span 12}
-  .crew{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .a-route,.a-comms,.a-crew,.a-ship{grid-column:span 12;grid-row:auto}
+  .shipgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .systems{grid-column:span 2}
 }
 @media (max-width:640px){
-  .grid>.p{grid-column:span 12}
-  .crew{grid-template-columns:minmax(0,1fr)}
-  .brand h1{font-size:17px}
-  .readout .v{font-size:16px}
-  .hdr{gap:10px 16px}
-  .log{height:auto;max-height:300px;min-height:120px}
+  .brand h1{font-size:17px} .readout .v{font-size:16px} .hdr{gap:10px 16px}
+  .crew,.pick,.syspick,.fate{grid-template-columns:minmax(0,1fr)}
+  .score{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ch{flex-direction:column;align-items:flex-start;gap:4px} .ch .h{text-align:left;max-width:none}
+  .log{max-height:260px}
 }
-@media (prefers-reduced-motion:reduce){
-  .mc.on.flash{animation:none}
-  .log li{animation:none}
-}
+@media (prefers-reduced-motion:reduce){.mc.on{animation:none}.bar i{transition:none}}
 </style>
 </head>
 <body>
@@ -208,393 +221,65 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   <div class="brand">
     <svg class="patch" viewBox="0 0 64 64" aria-hidden="true">
       <circle cx="32" cy="32" r="30" fill="#12171e" stroke="#ff7a2e" stroke-width="2.5"/>
-      <circle cx="32" cy="32" r="24" fill="none" stroke="#232b36" stroke-width="1"/>
+      <circle cx="32" cy="32" r="24" fill="none" stroke="#232b36"/>
       <path d="M8 40 Q32 18 56 40" fill="none" stroke="#5ee6e0" stroke-width="1.6" stroke-dasharray="3 3"/>
       <circle cx="46" cy="30" r="5" fill="#e9e7e2"/>
-      <circle cx="46" cy="30" r="8" fill="none" stroke="#e9e7e2" stroke-width=".8" opacity=".5"/>
       <path d="M18 34 l7 -4 l-2 7 z" fill="#ff7a2e"/>
       <path d="M32 6 v8 M32 50 v8" stroke="#ff7a2e" stroke-width="2"/>
     </svg>
     <div>
       <h1>Meridian <span>Control</span></h1>
-      <p>ISV Meridian · Earth → Halcyon · Sim</p>
+      <p>StarJourney · ISV Meridian · Earth → Halcyon</p>
     </div>
   </div>
-  <div class="readout"><span class="k">Mission elapsed</span><span class="v" id="met">D087 00:00:00</span></div>
-  <div class="readout"><span class="k">Halcyon arrival</span><span class="v o" id="eta">T−127d 00:00</span></div>
-  <button class="readout clockbtn" id="clockBtn" type="button" aria-label="Switch clock between ship time and Earth UTC"><span class="k" id="clockK">Earth UTC</span><span class="v" id="clock">00:00:00</span></button>
+  <div class="readout"><span class="k">Mission day</span><span class="v" id="hDay">D000</span></div>
+  <div class="readout"><span class="k">Halcyon window</span><span class="v o" id="hEta">T−140d</span></div>
+  <div class="readout"><span class="k">Jump</span><span class="v" id="hJump">0/8</span></div>
   <div class="ctrls">
-    <button class="sndbtn" id="snd" type="button" aria-pressed="false">SOUND OFF</button>
-    <button class="mc" id="mc" type="button" aria-label="Master caution. Press to acknowledge.">MASTER<br>CAUTION</button>
+    <button class="sbtn" id="snd" type="button" aria-pressed="false">Sound off</button>
+    <button class="sbtn" id="newRun" type="button">New run</button>
+    <div class="mc" id="mc" role="status" aria-label="Master caution">MASTER<br>CAUTION</div>
   </div>
 </header>
 
 <main class="grid">
-
-  <section class="p a-route route" aria-labelledby="hRoute"><span class="bk"></span>
-    <div class="ph"><b>01</b><h2 id="hRoute">Route · Earth to Halcyon</h2><span class="chip c">Seed ORION-42</span><span class="chip ok"><span class="dot"></span>On course</span></div>
-    <svg id="map" viewBox="0 0 760 300" role="img" aria-label="Branching route map from Earth to Halcyon. The Meridian is at waypoint 4 of 8."></svg>
-    <div class="legend">
-      <span><i class="o"></i>Meridian</span>
-      <span><i class="c"></i>Reachable next</span>
-      <span><i></i>Waypoint</span>
-      <span>— flown · ┄ possible lanes</span>
-    </div>
-    <div class="routefoot">
-      <span>Range to Earth <b class="mono" id="rng">5.02 AU</b></span>
-      <span>Velocity <b class="mono" id="vel">31.4 km/s</b></span>
-      <span>Next jump <b id="next">choose a lane (M3)</b></span>
-    </div>
+  <section class="p a-route" id="pRoute" aria-labelledby="hRoute"><span class="bk"></span>
+    <div class="ph"><b>01</b><h2 id="hRoute">Route · choose your lane</h2><span class="chip c" id="seedChip">Seed —</span></div>
+    <svg id="map" viewBox="0 0 760 320" role="group" aria-label="Route map from Earth to Halcyon"></svg>
+    <div class="legend"><span>◆ orange: Meridian &amp; route flown</span><span>◆ cyan: reachable next, tap to plan</span><span>NEB nebula · DER derelict · PLN planet · TRD trade · ANM anomaly · ??? unknown</span></div>
+    <div class="lanes" id="lanes"></div>
+    <div class="plan"><div class="txt" id="planTxt">—</div><button class="go" id="jumpBtn" type="button" disabled>Jump</button></div>
   </section>
 
-  <section class="p a-tel" aria-labelledby="hTel"><span class="bk"></span>
-    <div class="ph"><b>02</b><h2 id="hTel">Telemetry · live</h2><span class="chip c"><span class="dot"></span>4 channels</span></div>
-    <div class="strips" id="strips"></div>
-  </section>
-
-  <section class="p a-ship ship" aria-labelledby="hShip"><span class="bk"></span>
-    <div class="ph"><b>03</b><h2 id="hShip">Vehicle · ISV Meridian</h2><span class="chip">"Merry"</span></div>
-    <svg viewBox="0 0 400 170" role="img" aria-label="Side schematic of the Meridian: reactor, habitat ring, cargo spine and drive.">
-      <defs>
-        <radialGradient id="plume" cx="0" cy=".5" r="1">
-          <stop offset="0" stop-color="#5ee6e0" stop-opacity=".9"/>
-          <stop offset="1" stop-color="#5ee6e0" stop-opacity="0"/>
-        </radialGradient>
-      </defs>
-      <g stroke="#586070" fill="none" stroke-width="1">
-        <line x1="10" y1="85" x2="390" y2="85" stroke-dasharray="2 5"/>
-      </g>
-      <ellipse id="plumeEl" cx="330" cy="85" rx="60" ry="14" fill="url(#plume)"/>
-      <g fill="#171d26" stroke="#8a919b" stroke-width="1.3">
-        <path d="M40 85 L62 70 L62 100 Z"/>                 <!-- sensor nose -->
-        <rect x="62" y="72" width="40" height="26"/>        <!-- command -->
-        <rect x="102" y="80" width="120" height="10"/>      <!-- spine -->
-        <rect x="118" y="30" width="22" height="110" rx="3"/> <!-- hab ring -->
-        <rect x="160" y="62" width="18" height="18"/><rect x="160" y="90" width="18" height="18"/>
-        <rect x="184" y="62" width="18" height="18"/><rect x="184" y="90" width="18" height="18"/>
-        <rect x="222" y="68" width="42" height="34"/>       <!-- reactor -->
-        <path d="M264 74 L292 66 L292 104 L264 96 Z"/>      <!-- drive bell -->
-        <path d="M232 68 L226 36 L262 36 L256 68 M232 102 L226 134 L262 134 L256 102" fill="none"/> <!-- radiators -->
-      </g>
-      <g id="shipZones" fill="none" stroke-width="2">
-        <rect data-z="hab" x="118" y="30" width="22" height="110" rx="3" stroke="transparent"/>
-        <rect data-z="reactor" x="222" y="68" width="42" height="34" stroke="transparent"/>
-        <rect data-z="cmd" x="62" y="72" width="40" height="26" stroke="transparent"/>
-      </g>
-      <g font-family="IBM Plex Mono, monospace" font-size="9" fill="#8a919b" letter-spacing=".08em">
-        <text x="62" y="118">CMD</text>
-        <text x="112" y="156">HAB RING</text>
-        <text x="160" y="124">CARGO</text>
-        <text x="222" y="150">REACTOR</text>
-        <text x="296" y="118">DRIVE</text>
-      </g>
-      <circle id="beacon" cx="129" cy="30" r="2.5" fill="#ff7a2e"/>
-    </svg>
-    <div class="shipstats">
-      <div class="stat"><div class="k">Hull</div><div class="v" id="sHull">94%</div></div>
-      <div class="stat"><div class="k">Thrust</div><div class="v" id="sThr">0.02 g</div></div>
-      <div class="stat"><div class="k">Crew dose</div><div class="v" id="sDose">160 mSv</div></div>
-    </div>
-  </section>
-
-  <section class="p a-subs" aria-labelledby="hSubs" id="subsPanel"><span class="bk"></span>
-    <div class="ph"><b>04</b><h2 id="hSubs">Subsystems</h2><span class="chip ok" id="subsChip"><span class="dot"></span>12/12 go</span></div>
-    <div class="matrix" id="matrix"></div>
-    <div class="detail" id="detail" aria-live="polite"><h3>Select a system</h3><p>Tap a light for its status.</p></div>
-  </section>
-
-  <section class="p a-comms" aria-labelledby="hComms"><span class="bk"></span>
-    <div class="ph"><b>05</b><h2 id="hComms">Comms · deep-space link</h2><span class="chip c"><span class="dot"></span>Link up</span></div>
-    <div class="delay">One-way light time <b class="mono" id="olt">41m 45s</b> · everything you hear already happened.</div>
-    <ol class="log" id="log" aria-live="polite"></ol>
+  <section class="p a-comms" id="pComms" aria-labelledby="hComms"><span class="bk"></span>
+    <div class="ph"><b>02</b><h2 id="hComms">Comms · incoming</h2><span class="chip c" id="commsChip">Link up</span></div>
+    <div id="event" aria-live="polite"></div>
+    <div class="loghd">Mission log</div>
+    <ol class="log" id="log"></ol>
   </section>
 
   <section class="p a-crew" aria-labelledby="hCrew"><span class="bk"></span>
-    <div class="ph"><b>06</b><h2 id="hCrew">Crew biomed · 4 aboard</h2><span class="chip ok"><span class="dot"></span>All vitals nominal</span></div>
+    <div class="ph"><b>03</b><h2 id="hCrew">Crew · biomed</h2><span class="chip ok" id="crewChip">4 aboard</span></div>
     <div class="crew" id="crew"></div>
   </section>
 
+  <section class="p a-ship" id="pShip" aria-labelledby="hShip"><span class="bk"></span>
+    <div class="ph"><b>04</b><h2 id="hShip">Ship · resources &amp; systems</h2><span class="chip" id="shipChip">"Merry"</span></div>
+    <div class="shipgrid" id="ship"></div>
+  </section>
 </main>
 
 <footer class="foot">
-  <span>STARJOURNEY · PROTOTYPE M1 · DASHBOARD SHELL</span>
-  <span>ALL TELEMETRY SIMULATED · CREW DOSE @ 1.84 mSv/DAY (MSL RAD CRUISE)</span>
+  <span>STARJOURNEY · PROTOTYPE · FIRST PLAYABLE RUN</span>
+  <span id="legacyFoot">RUNS FLOWN: 0</span>
 </footer>
 </div>
 
-<script>
-(() => {
-"use strict";
-const $ = s => document.querySelector(s);
-const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const COL = {c:css("--c"),o:css("--o"),amber:css("--amber"),dim:css("--dim"),dim2:css("--dim2"),line:css("--line"),t:css("--t")};
+<div class="ov" id="ovPrep" hidden></div>
+<div class="ov" id="ovCrisis" hidden></div>
+<div class="ov" id="ovEnd" hidden></div>
 
-/* Seeded RNG (mulberry32) — same seed, same route. */
-function rng(seed){let a=0;for(const ch of seed)a=(a*31+ch.charCodeAt(0))|0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-const R = rng("ORION-42");
-
-/* ── Mission clock ───────────────────────── */
-const T0 = performance.now();
-const START_DAY = 87, TRIP_DAYS = 214;
-const pad = (n,w=2)=>String(Math.floor(n)).padStart(w,"0");
-let clockMode = "utc";
-$("#clockBtn").addEventListener("click",()=>{clockMode = clockMode==="utc"?"ship":"utc";$("#clockK").textContent = clockMode==="utc"?"Earth UTC":"Ship time";tickClock()});
-const SHIFT = 9*3600+14*60; // mission day starts mid-shift
-function missionSeconds(){return START_DAY*86400 + SHIFT + (performance.now()-T0)/1000}
-function tickClock(){
-  const s = missionSeconds();
-  const d = Math.floor(s/86400), r = s%86400;
-  $("#met").textContent = `D${pad(d,3)} ${pad(r/3600)}:${pad(r%3600/60)}:${pad(r%60)}`;
-  const left = TRIP_DAYS*86400 - s, ld = Math.floor(left/86400), lr = left%86400;
-  $("#eta").textContent = `T−${ld}d ${pad(lr/3600)}:${pad(lr%3600/60)}`;
-  if(clockMode==="utc"){const n=new Date();$("#clock").textContent=`${pad(n.getUTCHours())}:${pad(n.getUTCMinutes())}:${pad(n.getUTCSeconds())}`}
-  else $("#clock").textContent = `${pad(r/3600)}:${pad(r%3600/60)}:${pad(r%60)}`;
-  // Range grows slowly; light time = range / c.
-  const au = 5.02 + (s-START_DAY*86400-SHIFT)*2.1e-7;
-  $("#rng").textContent = au.toFixed(4)+" AU";
-  const olt = au*149597870.7/299792.458;
-  $("#olt").textContent = `${Math.floor(olt/60)}m ${pad(olt%60)}s`;
-  $("#sDose").textContent = Math.round(s/86400*1.84)+" mSv";
-}
-
-/* ── Route map ───────────────────────────── */
-const TYPES = [["nebula","Nebula"],["derelict","Derelict"],["planet","Planet"],["anomaly","Anomaly"],["trade","Trade post"],["unknown","Unknown"]];
-function buildMap(){
-  const svg = $("#map"), W=760, H=300, L=8, cur=3;
-  const layers=[];
-  for(let i=0;i<L;i++){
-    const n = (i===0||i===L-1)?1:2+Math.floor(R()*3);
-    const col=[];for(let j=0;j<n;j++){
-      const y = n===1?H/2:40+(H-80)*(j/(n-1)) + (R()-.5)*22;
-      col.push({x:44+i*(W-88)/(L-1)+(R()-.5)*16,y,t:i===0?"earth":i===L-1?"halcyon":TYPES[Math.floor(R()*TYPES.length)][0],out:[]});
-    }layers.push(col);
-  }
-  for(let i=0;i<L-1;i++){
-    const a=layers[i],b=layers[i+1];
-    a.forEach((nd,j)=>{const k=Math.round(j*(b.length-1)/Math.max(1,a.length-1));nd.out.push(k);if(R()<.55&&b.length>1)nd.out.push(Math.min(b.length-1,k+(R()<.5?-1:1)))});
-    b.forEach((_,k)=>{if(!a.some(nd=>nd.out.includes(k)))a[Math.floor(R()*a.length)].out.push(k)});
-    a.forEach(nd=>nd.out=[...new Set(nd.out.map(k=>Math.max(0,k)))]);
-  }
-  // Pick the flown path through layer `cur`.
-  const path=[0];for(let i=0;i<cur;i++)path.push(layers[i][path[i]].out[0]);
-  let h="";
-  for(let i=0;i<L-1;i++)layers[i].forEach((nd,j)=>nd.out.forEach(k=>{
-    const m=layers[i+1][k], flown=i<cur&&path[i]===j&&path[i+1]===k, nxt=i===cur&&path[i]===j;
-    h+=`<line x1="${nd.x}" y1="${nd.y}" x2="${m.x}" y2="${m.y}" stroke="${flown?COL.o:nxt?COL.c:COL.dim2}" stroke-width="${flown?2.2:1.2}" ${flown?"":'stroke-dasharray="3 5"'} opacity="${flown||nxt?1:.55}"/>`;
-  }));
-  const glyph=(t,x,y,c,f)=>{
-    if(t==="earth")return`<circle cx="${x}" cy="${y}" r="9" fill="#12171e" stroke="${COL.c}" stroke-width="1.6"/><path d="M${x-9} ${y} h18" stroke="${COL.c}" stroke-width="1"/>`;
-    if(t==="halcyon")return`<circle cx="${x}" cy="${y}" r="12" fill="#12171e" stroke="${COL.t}" stroke-width="1.8"/><circle cx="${x}" cy="${y}" r="17" fill="none" stroke="${COL.t}" stroke-width=".8" stroke-dasharray="2 3"/>`;
-    return`<rect x="${x-6}" y="${y-6}" width="12" height="12" transform="rotate(45 ${x} ${y})" fill="${f}" stroke="${c}" stroke-width="1.5"/>`;
-  };
-  layers.forEach((col,i)=>col.forEach((nd,j)=>{
-    const here=i===cur&&path[i]===j, reach=i===cur+1&&layers[cur][path[cur]].out.includes(j), past=i<cur&&path[i]===j;
-    const c=here?COL.o:reach?COL.c:past?COL.o:COL.dim;
-    h+=glyph(nd.t,nd.x,nd.y,c,here?COL.o:"#12171e");
-    if(reach)h+=`<circle cx="${nd.x}" cy="${nd.y}" r="11" fill="none" stroke="${COL.c}" stroke-width="1"><animate attributeName="r" values="9;15;9" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;0;1" dur="2.2s" repeatCount="indefinite"/></circle>`;
-    const lab = nd.t==="earth"?"EARTH":nd.t==="halcyon"?"HALCYON":TYPES.find(t=>t[0]===nd.t)[1].toUpperCase();
-    if(nd.t==="earth"||nd.t==="halcyon"||here||reach)
-      h+=`<text x="${nd.x}" y="${nd.y+(nd.t==="halcyon"?32:22)}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing=".08em" fill="${here?COL.o:reach?COL.c:COL.t}">${lab}</text>`;
-  }));
-  const me=layers[cur][path[cur]];
-  h+=`<path d="M${me.x-4} ${me.y-18} l4 6 l4 -6" fill="${COL.o}"/>`;
-  svg.innerHTML=h;
-  if(reduce)svg.querySelectorAll("animate").forEach(a=>a.remove());
-  const nextTypes=layers[cur][path[cur]].out.map(k=>{const t=layers[cur+1][k].t;return(TYPES.find(x=>x[0]===t)||[0,t])[1]});
-  $("#next").textContent = nextTypes.join(" or ")+" — lane choice arrives in M3";
-}
-
-/* ── Telemetry strip charts ──────────────── */
-const CH = [
-  {k:"Fuel",u:"%",v:61.8,lo:0,hi:100,step:s=>s.v-0.004+(R()-.5)*.02,fmt:v=>v.toFixed(1)},
-  {k:"O₂ partial",u:"kPa",v:21.2,lo:18,hi:23,step:s=>21.2+(s.v-21.2)*.92+(R()-.5)*.18,fmt:v=>v.toFixed(2),warnBelow:19.5},
-  {k:"Reactor",u:"%",v:82,lo:60,hi:100,step:s=>82+(s.v-82)*.95+(R()-.5)*1.2,fmt:v=>v.toFixed(1)},
-  {k:"Hull stress",u:"MPa",v:12,lo:0,hi:40,step:s=>Math.max(2,12+(s.v-12)*.9+(R()-.5)*3+(R()<.02?14:0)),fmt:v=>v.toFixed(1),warnAbove:28},
-];
-const N=160;
-function setupStrips(){
-  const box=$("#strips");
-  CH.forEach(ch=>{
-    ch.buf=Array.from({length:N},()=>ch.v);
-    const el=document.createElement("div");el.className="strip";
-    el.innerHTML=`<div class="lab"><span class="k">${ch.k}</span><span class="v"><span>${ch.fmt(ch.v)}</span><small>${ch.u}</small></span></div><canvas aria-hidden="true"></canvas>`;
-    box.appendChild(el);ch.el=el;ch.val=el.querySelector(".v span");ch.cv=el.querySelector("canvas");
-  });
-}
-function fit(cv){const r=cv.getBoundingClientRect(),d=devicePixelRatio||1;if(cv.width!==Math.round(r.width*d)){cv.width=Math.round(r.width*d);cv.height=Math.round(r.height*d)}return cv.getContext("2d")}
-function drawStrip(ch){
-  const cv=ch.cv,g=fit(cv),W=cv.width,H=cv.height,d=devicePixelRatio||1;
-  g.clearRect(0,0,W,H);
-  g.strokeStyle="rgba(94,230,224,.07)";g.lineWidth=1;
-  for(let i=1;i<4;i++){const y=Math.round(H*i/4)+.5;g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke()}
-  for(let x=W-(tick%20)*(W/N);x>0;x-=W/N*20){g.beginPath();g.moveTo(Math.round(x)+.5,0);g.lineTo(Math.round(x)+.5,H);g.stroke()}
-  const y=v=>H-4*d-(v-ch.lo)/(ch.hi-ch.lo)*(H-8*d);
-  const warn=ch.el.classList.contains("warn"), col=warn?COL.amber:COL.c;
-  if(ch.warnBelow||ch.warnAbove){const ly=y(ch.warnBelow??ch.warnAbove);g.strokeStyle="rgba(255,179,0,.4)";g.setLineDash([4*d,4*d]);g.beginPath();g.moveTo(0,ly);g.lineTo(W,ly);g.stroke();g.setLineDash([])}
-  g.beginPath();ch.buf.forEach((v,i)=>{const x=i/(N-1)*W;i?g.lineTo(x,y(v)):g.moveTo(x,y(v))});
-  g.strokeStyle=col;g.lineWidth=1.5*d;g.stroke();
-  g.lineTo(W,H);g.lineTo(0,H);g.closePath();
-  const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,warn?"rgba(255,179,0,.18)":"rgba(94,230,224,.16)");gr.addColorStop(1,"rgba(94,230,224,0)");g.fillStyle=gr;g.fill();
-  const ey=y(ch.buf[N-1]);g.fillStyle=col;g.beginPath();g.arc(W-3*d,ey,3*d,0,7);g.fill();
-}
-let tick=0;
-function stepTelemetry(){
-  tick++;
-  CH.forEach(ch=>{
-    ch.v=Math.min(ch.hi,Math.max(ch.lo,ch.step(ch)));ch.buf.push(ch.v);ch.buf.shift();
-    ch.val.textContent=ch.fmt(ch.v);
-    ch.el.classList.toggle("warn",(ch.warnBelow&&ch.v<ch.warnBelow)||(ch.warnAbove&&ch.v>ch.warnAbove));
-    drawStrip(ch);
-  });
-  const hull=CH[3].v; $("#sHull").textContent=Math.round(100-Math.max(0,hull-12)*.3-6)+"%";
-  $("#vel").textContent=(31.4+Math.sin(tick/200)*.05).toFixed(2)+" km/s";
-  $("#plumeEl").setAttribute("rx",String(54+R()*12));
-}
-
-/* ── Subsystems ──────────────────────────── */
-const SUBS=[
-  ["Drive","Fusion drive at cruise throttle. Plasma containment steady."],
-  ["Nav","Star tracker locked on 3 references. Drift 0.2 arcsec/hr."],
-  ["Life supp","Atmosphere cycling nominally. Wrench says it smells 'fine, mostly'."],
-  ["CO₂ scrub","Amine beds at 38% saturation. Swap scheduled day 96."],
-  ["Water","Reclamation loop 93% efficient. Do not ask where it came from."],
-  ["Shields","Magnetic shield at 70%. Dose rate within plan."],
-  ["Hull","Micrometeoroid log: 3 hits this week, all sub-millimetre."],
-  ["Comms","High-gain dish on Earth. Link margin +4.1 dB."],
-  ["Sensors","Long-range array sweeping lanes ahead."],
-  ["Reactor","Core temp 612 K. Radiators shedding 2.1 MW."],
-  ["Cryo","Cargo cryo stable at 77 K. The seed vault is fine."],
-  ["Med bay","Autodoc idle. Dr. Sato has restocked the good tape."],
-];
-let sel=-1;const caution=new Set();
-function renderSubs(){
-  const m=$("#matrix");m.innerHTML="";
-  SUBS.forEach(([n],i)=>{
-    const b=document.createElement("button");b.type="button";b.className="lt"+(caution.has(i)?" caution":"");
-    b.setAttribute("aria-pressed",String(sel===i));b.innerHTML=`<span class="led"></span><span class="n">${n}</span>`;
-    b.addEventListener("click",()=>{sel=i;renderSubs()});m.appendChild(b);
-  });
-  const go=12-caution.size, chip=$("#subsChip");
-  chip.className="chip "+(go===12?"ok":"warn");chip.innerHTML=`<span class="dot"></span>${go}/12 go`;
-  $("#subsPanel").classList.toggle("alert",caution.size>0);
-  const d=$("#detail");
-  if(sel<0){d.innerHTML="<h3>Select a system</h3><p>Tap a light for its status.</p>";return}
-  const [n,txt]=SUBS[sel];
-  d.innerHTML=`<h3>${n} · ${caution.has(sel)?'<span style="color:var(--amber)">Caution</span>':'<span style="color:var(--green)">Go</span>'}</h3><p>${caution.has(sel)?cautionText[sel]||"Reading out of band. Crew investigating.":txt}</p>`;
-}
-const cautionText={};
-
-/* ── Crew ────────────────────────────────── */
-const CREW=[
-  {n:"Cmdr. Ada Okafor",r:"Commander · Pilot",hr:62,st:22,lines:["Steady hands, steady ship.","Merry flies straight when you let her.","I've had worse commutes."]},
-  {n:"Tomas \"Wrench\" Vey",r:"Engineer",hr:74,st:41,lines:["If it rattles, it's working.","I talk to the reactor. It doesn't talk back. Yet.","Duct tape is a structural material."]},
-  {n:"Dr. Lin Sato",r:"Medic",hr:66,st:18,lines:["Everyone drink water. That's an order.","Wrench, that is not what the autodoc is for.","Vitals look good. Morale: ask again later."]},
-  {n:"Priya Raman",r:"Scientist",hr:70,st:30,lines:["There's something odd in the lane data.","Halcyon's albedo just ticked up. Interesting.","I named a dust grain. Don't tell Ada."]},
-];
-function setupCrew(){
-  const box=$("#crew");
-  CREW.forEach((c,i)=>{
-    const el=document.createElement("article");el.className="cc";
-    el.innerHTML=`<header><div><h3>${c.n}</h3><div class="role">${c.r}</div></div><div class="hr"><span>${c.hr}</span><small>BPM</small></div></header>
-      <canvas aria-hidden="true"></canvas>
-      <div class="vit">
-        <div><div class="k">SpO₂</div><div class="v sp">98%</div></div>
-        <div><div class="k">Core temp</div><div class="v tp">36.8°</div></div>
-        <div><div class="k">Stress</div><div class="v stv">${c.st}</div><div class="bar${c.st>60?" hi":""}"><i style="width:${c.st}%"></i></div></div>
-      </div>
-      <p class="quote">“${c.lines[0]}”</p>`;
-    box.appendChild(el);Object.assign(c,{el,cv:el.querySelector("canvas"),hrEl:el.querySelector(".hr span"),q:el.querySelector(".quote"),x:0,phase:R(),last:null});
-  });
-}
-// PQRST-ish waveform, t in [0,1) of one beat.
-function ecg(t){
-  const g=(m,s,a)=>a*Math.exp(-((t-m)**2)/(2*s*s));
-  return g(.18,.025,.12)+g(.36,.008,-.12)+g(.4,.01,1)+g(.44,.01,-.25)+g(.66,.045,.28);
-}
-function drawECG(c,dt){
-  const cv=c.cv,g=fit(cv),W=cv.width,H=cv.height,d=devicePixelRatio||1;
-  const speed=W/3.2; // 3.2 s across the trace
-  if(!c.last){g.fillStyle="rgba(0,0,0,0)";g.clearRect(0,0,W,H);c.last={x:0,y:H*.7}}
-  const hr=c.hr+Math.sin(performance.now()/4000+c.phase*6)*2;
-  const steps=Math.max(1,Math.round(dt*speed/(2*d)));
-  g.lineWidth=1.4*d;g.strokeStyle=COL.c;g.lineCap="round";
-  for(let s=0;s<steps;s++){
-    c.x+=dt*speed/steps;c.phase=(c.phase+dt/steps*hr/60)%1;
-    if(c.x>=W){c.x=0;c.last.x=0}
-    const y=H*.72-ecg(c.phase)*H*.58;
-    g.clearRect(c.x+1*d,0,10*d,H); // erase ahead of the sweep
-    g.beginPath();g.moveTo(c.last.x,c.last.y);g.lineTo(c.x,y);g.stroke();
-    c.last={x:c.x,y};
-  }
-  c.hrEl.textContent=Math.round(hr);
-}
-
-/* ── Comms log ───────────────────────────── */
-const log=$("#log");
-function stamp(){const s=missionSeconds()%86400;return`${pad(s/3600)}:${pad(s%3600/60)}:${pad(s%60)}`}
-function say(who,msg,cls=""){
-  const li=document.createElement("li");if(cls)li.className=cls;
-  const wc=who==="SOL"?"sol":who==="MASTER CAUTION"?"sys":who==="CONTROL"?"you":"";
-  li.innerHTML=`<time>${stamp()}</time><div><span class="who ${wc}">${who}</span><span class="msg">${msg}</span></div>`;
-  log.appendChild(li);while(log.children.length>60)log.firstChild.remove();
-  log.scrollTop=log.scrollHeight;
-}
-const CHATTER=[
-  ["SOL","Daily status packet transmitted. Earth will read it in about forty-two minutes."],
-  ["OKAFOR","Control, Meridian. Burn complete, we're on the lane. Coffee reserves holding."],
-  ["VEY","Reactor's purring. Well, humming. Purring would be concerning."],
-  ["SATO","Reminder: exercise block at 14:00. Yes, Wrench, you too."],
-  ["RAMAN","Spectrometer picked up water ice on a rock we just passed. Logging it."],
-  ["SOL","Crew morale index: 71. Up 3 since Priya found the chocolate."],
-  ["OKAFOR","Quiet shift. I don't trust quiet shifts."],
-  ["VEY","Found a bolt on the floor. Don't know where it's from. Putting it back somewhere."],
-  ["SOL","Reminder: Halcyon is not guaranteed to be as calm as its name."],
-  ["RAMAN","Long-range array shows two lanes ahead. One's shorter. One's prettier."],
-];
-const CAUTIONS=[
-  [3,"CO₂ scrubber bed B saturating early.","VEY","Scrubber B's gone moody. Swapping the bed. Nobody breathe heavy."],
-  [6,"Hull: impact detected, section 4.","OKAFOR","Felt that one. Pressure holding. Wrench, go look at it with your eyes."],
-  [4,"Water reclamation efficiency dropped to 81%.","SATO","Water tastes like pennies. That's my professional medical opinion."],
-  [5,"Shield field flicker, 4% dip.","RAMAN","Solar particles picked up. We're fine, the dosimeters are just chatty."],
-  [8,"Sensor array lost lock on lane marker.","SOL","Re-acquiring. I was not daydreaming. I do not daydream."],
-];
-let mcOn=false;
-const mc=$("#mc");
-function masterCaution(on){mcOn=on;mc.classList.toggle("on",on);mc.classList.toggle("flash",on&&!reduce)}
-mc.addEventListener("click",()=>{if(!mcOn)return;mc.classList.remove("flash");say("CONTROL","Caution acknowledged. Meridian, we see it — work the checklist.");beep(440,.08)});
-function triggerCaution(){
-  const free=CAUTIONS.filter(c=>!caution.has(c[0]));if(!free.length)return;
-  const [i,sys,who,line]=free[Math.floor(R()*free.length)];
-  caution.add(i);cautionText[i]=sys;renderSubs();masterCaution(true);
-  say("MASTER CAUTION",sys,"sys");beep(880,.12);setTimeout(()=>beep(660,.12),160);
-  setTimeout(()=>say(who,line),2500);
-  setTimeout(()=>{caution.delete(i);renderSubs();if(!caution.size)masterCaution(false);say("SOL",`${SUBS[i][0]} back in band. Clearing caution.`)},16000+R()*6000);
-}
-
-/* ── Sound (off until the viewer turns it on) ─ */
-let ac=null,sound=false;
-$("#snd").addEventListener("click",e=>{
-  sound=!sound;e.currentTarget.setAttribute("aria-pressed",String(sound));e.currentTarget.textContent=sound?"SOUND ON":"SOUND OFF";
-  if(sound&&!ac){try{ac=new (window.AudioContext||window.webkitAudioContext)()}catch(_){}}
-  if(sound)beep(1200,.05);
-});
-function beep(f,d){if(!sound||!ac)return;const o=ac.createOscillator(),g=ac.createGain();o.type="square";o.frequency.value=f;g.gain.setValueAtTime(.04,ac.currentTime);g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+d);o.connect(g).connect(ac.destination);o.start();o.stop(ac.currentTime+d)}
-
-/* ── Boot ────────────────────────────────── */
-buildMap();setupStrips();renderSubs();setupCrew();tickClock();
-say("SOL","Good morning, Control. Day 87 of the Halcyon transfer. All crew accounted for.");
-say("OKAFOR","Meridian here. Merry's behaving. Mostly.");
-setInterval(tickClock,1000);
-setInterval(stepTelemetry,reduce?1000:200);for(let i=0;i<N;i++)stepTelemetry();
-let ci=0;setInterval(()=>{const[w,m]=CHATTER[ci++%CHATTER.length];say(w,m);beep(1500,.03)},9000);
-setInterval(()=>{const c=CREW[Math.floor(R()*CREW.length)];c.q.textContent=`“${c.lines[Math.floor(R()*c.lines.length)]}”`},7000);
-setTimeout(triggerCaution,12000);setInterval(()=>{if(R()<.6)triggerCaution()},30000);
-let lastT=performance.now();
-function frame(t){const dt=Math.min(.1,(t-lastT)/1000);lastT=t;CREW.forEach(c=>drawECG(c,dt));requestAnimationFrame(frame)}
-if(reduce){CREW.forEach(c=>drawECG(c,3.2))}else requestAnimationFrame(frame);
-addEventListener("resize",()=>CREW.forEach(c=>c.last=null));
-})();
-</script>
+<script src="content.js"></script>
+<script src="game.js"></script>
 </body>
 </html>
