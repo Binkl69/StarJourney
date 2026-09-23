@@ -57,8 +57,8 @@ let last = performance.now();
 function loop(now) {
   const dt = Math.min(.1, (now - last) / 1000); last = now;
   if (S && !S.over && booted) for (let k = 0; k < (window.__sjSpeed || 1) && !S.over; k++) tick(dt); // __sjSpeed: test fast-forward
-  draw(now / 1000);
   requestAnimationFrame(loop);
+  try { draw(now / 1000); } catch (e) { console.error(e); }
 }
 function tick(dt) {
   S.time += dt;
@@ -612,6 +612,7 @@ function toScr(p) { return [navC[0] + p.x * navScale, navC[1] + p.y * navScale];
 const BELT = Array.from({ length: 170 }, (_, i) => ({ a: Math.random() * TAU, r: D.SYSTEM.belt[0] + Math.random() * (D.SYSTEM.belt[1] - D.SYSTEM.belt[0]), s: Math.random() < .2 ? 2 : 1.2 }));
 function drawNav(t) {
   navC = [W / 2, H / 2 + 8 * DPR]; navScale = Math.min(W / 2 - 14 * DPR, H / 2 - 26 * DPR);
+  if (navScale < 20 * DPR) return;
   const R = navScale, [cx, cy] = navC;
   // range rings
   g.shadowBlur = 0; g.strokeStyle = "rgba(109,255,138,.07)"; g.lineWidth = 1;
