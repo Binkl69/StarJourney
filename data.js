@@ -22,35 +22,45 @@ const ROOMS = {
 const BUILDABLE = ["sensor", "drone", "shield", "weapon", "battery", "coolant", "cargo"];
 const START_LAYOUT = ["bridge", "reactor", "engine", "life", null, null, null, null, null]; // 3 × 3 grid
 
-const START = { hull: 20, fuel: 8, o2: 100, scrap: 10 };
+const START = { hull: 20, fuel: 60, o2: 100, scrap: 10 };
 const TUNE = {
   reactorMax: 8,          // reactor knob positions 0..8
   safeOutput: 5,          // above this the reactor heats up
   heatPerPoint: 2.2,      // heat/sec per point above safe
   coolantShift: 2,        // coolant raises the safe point by this (×2 with coolant loop)
-  jumpCharge: 9,          // % per second per engine power point
+  speedPerEng: .012,      // map units/sec per ENG power point (the ENG fader is the throttle)
+  fuelPerEng2: .12,       // fuel/sec = this × ENG² — pushing harder costs more per kilometre
+  drift: .003,            // speed with engines at zero
+  slingBoost: 2, slingTime: 12,        // slingshot: speed ×2, no fuel, for 12 s
+  brakeFuel: 12,                        // fuel for a braking burn into orbit at Halcyon
+  scoopFuel: 22, scoopHeat: 30,         // skimming Brann's clouds for fuel
   o2Drain: 1.6, o2Regen: .8,
   droneBattery: b => 40 + b * 25, droneMove: 3, droneScan: 6,
   weaponCharge: w => w * 11,     // % per second
   shieldRecharge: 3.2,           // seconds per layer
 };
 
-/* ── Sector 1: the map on the NAV scope ──
-   x,y in 0..100. type decides what happens on arrival. */
-const SECTOR = {
-  name: "SECTOR 1 · KUIPER VERGE",
-  nodes: [
-    { id: "start",  x: 10, y: 55, type: "empty",    name: "DEPARTURE POINT" },
-    { id: "a",      x: 28, y: 30, type: "derelict", name: "ORE HAULER 'MAGPIE'", map: "hauler" },
-    { id: "b",      x: 30, y: 74, type: "rocks",    name: "ICE FIELD" },
-    { id: "c",      x: 48, y: 50, type: "beacon",   name: "NAV BEACON 7" },
-    { id: "d",      x: 52, y: 18, type: "hostile",  name: "UNKNOWN CONTACT", enemy: "scav" },
-    { id: "e",      x: 60, y: 82, type: "station",  name: "RELAY STATION TESSERA", map: "station" },
-    { id: "f",      x: 74, y: 40, type: "hostile",  name: "UNKNOWN CONTACT", enemy: "drone" },
-    { id: "gate",   x: 92, y: 58, type: "gate",     name: "JUMP GATE" },
+/* ── The Halcyon system: one star, everything on the NAV scope moves ──
+   r = orbit radius (0..1 of the scope), period = seconds per orbit, phase = starting angle (degrees).
+   A body with a parent orbits that body instead of the star.
+   known: visible from the start. Others show as "?" until sensors reach them. */
+const SYSTEM = {
+  name: "HALCYON SYSTEM",
+  star: "CALDER",
+  bodies: [
+    { id: "depot",   name: "KUIPER DEPOT",        type: "empty",    r: .93, period: 3000, phase: 200, known: true },
+    { id: "beacon",  name: "NAV BEACON 7",        type: "beacon",   r: .88, period: 1800, phase: 250 },
+    { id: "magpie",  name: "ORE HAULER 'MAGPIE'", type: "derelict", r: .79, period: 900,  phase: 170, map: "hauler" },
+    { id: "scav",    name: "SCAVENGER SKIFF",     type: "hostile",  r: .77, period: -700, phase: 120, enemy: "scav" },
+    { id: "tessera", name: "RELAY STATION TESSERA", type: "station", r: .68, period: 700, phase: 290, map: "station" },
+    { id: "brann",   name: "BRANN",               type: "giant",    r: .55, period: 800,  phase: 150, known: true, atmo: true, size: .045 },
+    { id: "aurora",  name: "ISV AURORA",          type: "derelict", parent: "brann", r: .075, period: 45, phase: 0, map: "aurora", veil: true },
+    { id: "halcyon", name: "HALCYON",             type: "halcyon",  r: .32, period: 520,  phase: 40, known: true, atmo: true, size: .022 },
+    { id: "picket",  name: "AUTOMATED PICKET",    type: "hostile",  parent: "halcyon", r: .075, period: 70, phase: 180, enemy: "drone" },
   ],
-  links: [["start", "a"], ["start", "b"], ["a", "c"], ["b", "c"], ["a", "d"], ["c", "f"], ["b", "e"], ["e", "f"], ["d", "f"], ["f", "gate"], ["e", "gate"]],
-  jumpCost: { default: 1, gate: 2 },
+  belt: [.73, .84],     // the ice belt: fast burns through it risk micrometeorite hits
+  veil: .095,           // Brann's storm band: sensors blind, lightning
+  sling: .12,           // pass this close to Brann (not stopping there) for a slingshot
 };
 
 /* ── Derelicts to explore with the drone ──
@@ -90,30 +100,46 @@ const MAPS = {
     ],
     logs: ["TESSERA AUTO-LOG: RELAYING AURORA TRANSMISSION TO EARTH. CONTENT: A COUNT. 1. 2. 3. ... RELAY OVERLOADED AT 4,112."],
     tape: "tessera",
-    core: "DATA CORE RECOVERED. AURORA'S LAST POSITION: INSIDE THE VEIL, 3 SECTORS SPINWARD. SHE WASN'T LOST. SHE WENT THERE ON PURPOSE.",
+    core: "DATA CORE RECOVERED. AURORA'S LAST POSITION: INSIDE THE VEIL, BRANN'S STORM BAND. SHE WASN'T LOST. SHE WENT THERE ON PURPOSE. MARKED ON NAV.",
+  },
+  aurora: {
+    title: "ISV AURORA", note: "Colony survey ship. Missing 11 years. Hull scorched by lightning. Lifeboat bay empty.",
+    grid: [
+      "#############",
+      "#O..X..#...K#",
+      "#.###.##.#..#",
+      "#...#..S.#T.#",
+      "###.####.#..#",
+      "#F..L....X..#",
+      "#.#####.###.#",
+      "#A..S...#S.O#",
+      "#############",
+    ],
+    logs: ["AURORA LOG: LANDER AWAY TO HALCYON. 41 SOULS. WE LEAVE THE COUNT RUNNING SO SOMEONE KNOWS WE'RE STILL THERE."],
+    tape: "aurora",
   },
 };
 
-/* ── Hostiles (seen on the radar) ── */
+/* ── Hostiles (seen on the radar) ──
+   range: how close before they engage. chase: their top speed (outrun them with more ENG). */
 const ENEMIES = {
-  scav:  { name: "SCAVENGER SKIFF", hull: 4, shields: 1, fireEvery: 5.5, dmg: 2, loot: { scrap: 6, fuel: 2 }, hail: "SCAVENGER: 'NICE SHIP. WE'LL TAKE IT.'" },
-  drone: { name: "AUTOMATED PICKET", hull: 5, shields: 2, fireEvery: 4.2, dmg: 2, loot: { scrap: 8, fuel: 1 }, hail: "PICKET: 'THIS LANE IS CLOSED. THIS LANE IS CLOSED.'" },
+  scav:  { name: "SCAVENGER SKIFF", hull: 4, shields: 1, fireEvery: 5.5, dmg: 2, loot: { scrap: 6, fuel: 14 }, hail: "SCAVENGER: 'NICE SHIP. WE'LL TAKE IT.'", range: .12, chase: .026 },
+  drone: { name: "AUTOMATED PICKET", hull: 5, shields: 2, fireEvery: 4.2, dmg: 2, loot: { scrap: 8, fuel: 8 }, hail: "PICKET: 'HALCYON IS CLOSED. HALCYON IS CLOSED.'", range: .07, chase: .004 },
 };
 
 /* ── Terminal text ── */
 const ARRIVE = {
-  empty:    "SECTOR QUIET. NOTHING ON SCOPE.",
-  derelict: "DERELICT ON SCOPE. NO LIFE SIGNS. DRONE BAY REQUIRED TO BOARD.",
+  empty:    "HOLDING POSITION. NOTHING ON SCOPE.",
+  derelict: "DERELICT ALONGSIDE. NO LIFE SIGNS. DRONE BAY REQUIRED TO BOARD.",
   station:  "ABANDONED STATION. DOCKING CLAMPS STILL ACTIVE. DRONE BAY REQUIRED TO BOARD.",
-  rocks:    "ICE FIELD. HULL SCRAPES LIKELY. SCRAP AND WATER-ICE IN THE ROCKS.",
   beacon:   "NAV BEACON 7 STILL TRANSMITTING. ONE MESSAGE IN BUFFER.",
-  hostile:  "CONTACT! WEAPONS LOCK DETECTED. SHIELDS UP.",
-  gate:     "JUMP GATE ONLINE. NEXT STOP: SECTOR 2.",
+  giant:    "HIGH ORBIT OVER BRANN. THE CLOUDS ARE FULL OF FUEL. SCOOP IT IF YOU CAN TAKE THE HEAT.",
+  hostile:  "CONTACT! WEAPONS LOCK DETECTED.",
 };
 const BEACON = "BEACON 7 BUFFER: '...MERIDIAN, IF YOU READ THIS, IT'S HALE. DON'T TRUST THE RELAYS. THE AURORA NEVER STOPPED TALKING. WE JUST STOPPED LISTENING.'";
 const CREW = [
   "ADA: BOARD IS YOURS, CONTROL. KEEP HER BALANCED.",
-  "WRENCH: REACTOR'S HAPPY UNDER FIVE. ABOVE FIVE SHE SULKS. ABOVE EIGHT SHE EXPLODES.",
+  "WRENCH: THE ENG FADER IS YOUR THROTTLE. MORE POWER, FASTER, THIRSTIER.",
   "LIN: LIFE SUPPORT NEEDS ONE POINT OF POWER. JUST ONE. PLEASE.",
 ];
 
@@ -134,6 +160,11 @@ const TAPES = {
     "INCOMING PACKET FROM AURORA. CONTENT: INTEGER SEQUENCE. INTENDED RECIPIENT: EARTH.",
     "PACKET CONTAINS A SECOND LAYER. SECOND LAYER IS ADDRESSED TO THE NEXT SHIP THAT ASKS.",
     "SECOND LAYER READS: YOU ARE LATE. WE SAVED YOU A SEAT. COME THROUGH THE VEIL." ] },
+  aurora: { label: "AURORA · CAPT. IMANI REYES", lines: [
+    "CAPTAIN REYES, AURORA. THE STORM TOOK OUR ENGINES. SHE WON'T FLY AGAIN.",
+    "HALCYON IS RIGHT THERE. GREEN. BREATHABLE. EARTH SAID IT WASN'T READY. EARTH WAS WRONG.",
+    "WE'RE TAKING THE LANDER DOWN. ALL FORTY-ONE OF US. THE BEACON WILL COUNT THE DAYS.",
+    "IF THE COUNT IS STILL GOING WHEN YOU GET HERE, WE'RE STILL HERE. BRING COFFEE." ] },
 };
 
 /* ── Incidents aboard: fires and hull breaches, handled from the SHIP screen ── */
@@ -150,5 +181,5 @@ const CREW_ABOARD = [
   { id: "priya",  tag: "P", name: "PRIYA",  home: "reactor", fix: ["PRIYA: SORTED. THE SIGNAL GOT LOUDER WHILE I WORKED.", "PRIYA: FIXED. CAN WE GO NOW?"] },
 ];
 
-return { ROOMS, BUILDABLE, START_LAYOUT, START, TUNE, SECTOR, MAPS, ENEMIES, ARRIVE, BEACON, CREW, TAPES, INCIDENTS, CREW_ABOARD };
+return { ROOMS, BUILDABLE, START_LAYOUT, START, TUNE, SYSTEM, MAPS, ENEMIES, ARRIVE, BEACON, CREW, TAPES, INCIDENTS, CREW_ABOARD };
 })();

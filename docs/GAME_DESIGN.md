@@ -1,4 +1,14 @@
-# StarJourney — Game Design (v0.5)
+# StarJourney — Game Design (v0.6)
+
+> **v0.6 (product owner): "One star system is enough. No jumping between stars."** The whole journey happens in the **Halcyon system**, and travel itself is gameplay:
+> - **Live orrery on the NAV scope.** The star Calder sits in the middle and everything orbits: Kuiper Depot (start), Nav Beacon 7, the ice belt with the hauler *Magpie* and a scavenger, relay station Tessera, the gas giant **Brann** with the **Veil** storm band (the *Aurora* is hidden inside it), and **Halcyon**, the goal, guarded by an automated picket. Positions change over time, so *when* you leave matters.
+> - **Fly anywhere, no lanes.** Tap a body and press BURN; the autopilot leads the moving target. **The ENG fader is the throttle:** speed grows with power, fuel burn with power squared, so fast trips cost more fuel for the same distance and starve other systems.
+> - **Hazards on the way.** Crossing the ice belt fast risks micrometeorite hits (shields help); the Veil blinds sensors and throws lightning (electrical fires).
+> - **Gravity tricks.** Pass through Brann's sling zone and hit SLING when the needle is on green: double speed and no fuel for 12 s. Miss and the hull takes stress. At Brann you can **scoop fuel** from the clouds, at the cost of heat and lightning.
+> - **Hostiles live in space.** They engage when you get close and chase at their own top speed; outrun them with more ENG or fight on radar.
+> - **Landing on Halcyon:** a **brake burn** (fuel) or an **aerobrake** (free, but damage depends on your ENG and shields at the moment you commit).
+> - **Story:** Hale's beacon tape → Magpie → Tessera's data core reveals where the Aurora is → the Aurora's tape: its crew landed on Halcyon, and the count is them saying they're alive. The ending printout changes with what you found.
+
 
 > **v0.5 (product owner): "I'm the control panel."** Not piloting a ship. The player operates the Meridian's console: dials, faders and switches to balance power; builds and demolishes rooms; travels between places; explores abandoned wrecks and stations through a drone camera; fights on radar. **1980s look**, not modern: mixed green/amber phosphor CRTs in warm grey plastic hardware with beige label plates (Alien's Nostromo is the touchstone). Reference games: *Duskers* (console-only derelict exploration), *FTL* (rooms & power).
 >

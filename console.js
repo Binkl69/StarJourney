@@ -16,19 +16,27 @@ const SYSTEMS = [ // fader order on the panel
   { k: "eng", lbl: "ENG", room: "engine" }, { k: "life", lbl: "LIFE", room: "life" }, { k: "sens", lbl: "SENS", room: "sensor" },
   { k: "drone", lbl: "DRONE", room: "drone" }, { k: "shd", lbl: "SHLD", room: "shield" }, { k: "wpn", lbl: "WPN", room: "weapon" },
 ];
-const node = id => D.SECTOR.nodes.find(n => n.id === id);
-const linked = (a, b) => D.SECTOR.links.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+const SYS = D.SYSTEM, body = id => SYS.bodies.find(b => b.id === id);
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+/* Where a body is at time t: star at (0,0), scope radius 1. Hostiles that broke orbit to chase you use S.foes. */
+function bodyPos(b, t = S.time) {
+  if (typeof b === "string") b = body(b);
+  if (S && S.foes[b.id]) return S.foes[b.id];
+  const c = b.parent ? bodyPos(b.parent, t) : { x: 0, y: 0 }, a = (b.phase + 360 * t / b.period) * Math.PI / 180;
+  return { x: c.x + Math.cos(a) * b.r, y: c.y + Math.sin(a) * b.r };
+}
 
 /* ── State ── */
 let S;
 function newGame() {
   S = { hull: D.START.hull, maxHull: D.START.hull, fuel: D.START.fuel, o2: D.START.o2, scrap: D.START.scrap,
     layout: D.START_LAYOUT.slice(), alloc: { eng: 2, life: 1, sens: 0, drone: 0, shd: 0, wpn: 0 }, eff: {},
-    reactor: 4, heat: 12, coolant: false, scram: 0, charge: 0, at: "start", target: null, visited: new Set(["start"]), done: new Set(),
-    mode: "nav", sel: null, explore: null, combat: null, travel: null, time: 0, over: false, core: false,
+    reactor: 4, heat: 12, coolant: false, scram: 0, at: "depot", pos: null, target: null, travel: null, visited: new Set(["depot"]), seen: new Set(), done: new Set(),
+    foes: {}, trail: [], trailT: 0, boost: 0, sling: null, landing: false, scoop: null, dry: false,
+    mode: "nav", sel: null, explore: null, combat: null, time: 0, over: false, core: false,
     incidents: {}, tapes: [], tapeI: -1, crew: null };
   S.crew = D.CREW_ABOARD.map(c => ({ ...c, room: roomOf(c.home), x: 0, y: 0, path: [], task: null, idle: 2 + Math.random() * 4, placed: false }));
-  computePower();
+  S.pos = bodyPos("depot"); computePower();
 }
 const has = room => S.layout.includes(room);
 const roomOf = room => Math.max(0, (S ? S.layout : D.START_LAYOUT).indexOf(room));
@@ -48,7 +56,7 @@ function safePoint() { return T.safeOutput + (has("battery") ? 2 : 0) + (S.coola
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(.1, (now - last) / 1000); last = now;
-  if (S && !S.over && booted) tick(dt);
+  if (S && !S.over && booted) for (let k = 0; k < (window.__sjSpeed || 1) && !S.over; k++) tick(dt); // __sjSpeed: test fast-forward
   draw(now / 1000);
   requestAnimationFrame(loop);
 }
@@ -67,10 +75,7 @@ function tick(dt) {
   else { S.o2 = Math.max(0, S.o2 - T.o2Drain * dt); if (!S.warnedO2 && S.o2 < 60) { S.warnedO2 = true; log("LIN: LIFE SUPPORT HAS NO POWER. WE'RE BREATHING OUR RESERVE.", "alert"); } }
   if (S.eff.life >= 1) S.warnedO2 = false;
   if (S.o2 <= 0) return lose("o2");
-  // Jump drive
-  if (S.target && !S.travel && S.fuel >= jumpCost(S.target)) S.charge = Math.min(100, S.charge + S.eff.eng * T.jumpCharge * dt);
-  // Travel animation
-  if (S.travel) { S.travel.t += dt / 1.6; if (S.travel.t >= 1) arrive(); }
+  flightTick(dt); if (S.over) return;
   if (S.combat) combatTick(dt);
   incidentsTick(dt); crewTick(dt); tapeTick(dt);
   if (S.heat > 92 && !burning("reactor") && Math.random() < dt * .25) startIncident(S.layout.indexOf("reactor"), "fire");
@@ -78,45 +83,119 @@ function tick(dt) {
   if (S.explore && S.eff.drone >= 1 && S.explore.stalled) { S.explore.stalled = false; log("DRONE LINK RESTORED.", "grn"); }
   ui();
 }
-const jumpCost = id => D.SECTOR.jumpCost[id] ?? D.SECTOR.jumpCost.default;
 
-/* ── NAV: pick a linked destination, charge engines, engage ── */
+/* ── NAV: one star system, everything moving. Pick a body, burn, and the autopilot flies an intercept.
+   The ENG fader is the throttle: speed grows with power, fuel burn grows with power squared. ── */
+function speed() {
+  if (S.fuel <= 0) return T.drift;                      // tanks dry: ion trickle only
+  return S.eff.eng * T.speedPerEng * (S.boost > 0 ? T.slingBoost : 1);
+}
+function aimAt(id) { // lead the target: where will it be when we get there?
+  let p = bodyPos(id); const v = Math.max(speed(), T.drift);
+  for (let k = 0; k < 3; k++) p = bodyPos(id, S.time + dist(S.pos, p) / v);
+  return p;
+}
 function selectTarget(id) {
-  if (S.travel || id === S.at) return;
-  if (!linked(S.at, id)) { log("NO DIRECT ROUTE. PLOT VIA A LINKED POINT."); sfx("err"); return; }
-  if (S.target !== id) S.charge = 0;
+  if (S.landing || id === S.at) return;
+  const b = body(id);
+  if (S.done.has(id) && b.type === "hostile") return;
   S.target = id; sfx("blip");
-  const n = node(id), known = revealed(id);
-  log(`COURSE PLOTTED: ${known ? n.name : "UNIDENTIFIED CONTACT"}. COST ${jumpCost(id)} FUEL. CHARGE ENGINES.`);
-  if (S.fuel < jumpCost(id)) log("INSUFFICIENT FUEL FOR THIS JUMP.", "alert");
+  log(`COURSE PLOTTED: ${revealed(b) ? b.name : "UNIDENTIFIED CONTACT"}. ${S.travel ? "ADJUSTING BURN." : "PRESS BURN."}`);
+  if (S.travel) S.travel.to = id;
 }
 function engage() {
-  if (!S.target || S.charge < 100 || S.travel) return;
-  if (S.explore) { log("RECALL THE DRONE BEFORE JUMPING.", "alert"); sfx("err"); return; }
-  S.fuel -= jumpCost(S.target); S.travel = { from: S.at, to: S.target, t: 0 };
-  if (S.combat) { log("EMERGENCY JUMP. WE'RE OUT OF HERE."); S.combat = null; }
-  S.charge = 0; log("JUMP ENGAGED."); sfx("jump"); setMode("nav");
+  if (S.travel) { cutEngines(); return; }
+  if (!S.target) { log("NO COURSE. TAP A BODY ON THE NAV SCOPE.", "alert"); sfx("err"); return; }
+  if (S.explore) { log("RECALL THE DRONE BEFORE BURNING.", "alert"); sfx("err"); return; }
+  if (S.scoop) { log("FINISH THE SCOOP FIRST.", "alert"); sfx("err"); return; }
+  if (S.eff.eng < 1 && S.fuel > 0) { log("NO POWER TO ENGINES. RAISE THE ENG FADER.", "alert"); sfx("err"); return; }
+  S.travel = { to: S.target }; S.at = null; log("MAIN ENGINE BURN."); sfx("jump"); setMode("nav");
+}
+function cutEngines() { S.travel = null; S.sling = null; log("ENGINES CUT. HOLDING POSITION."); sfx("clunk"); }
+function flightTick(dt) {
+  // parked: ride along with whatever we're orbiting
+  if (S.at) S.pos = { ...bodyPos(S.at) };
+  if (S.boost > 0) { S.boost -= dt; if (S.boost <= 0) log("SLINGSHOT SPENT. BACK ON OUR OWN ENGINES."); }
+  if (S.scoop) { S.scoop.t += dt; S.heat = Math.min(100, S.heat + T.scoopHeat / 5 * dt); if (Math.random() < dt * .06) { log("LIGHTNING STRIKE IN THE CLOUDS!", "alert"); randomIncident("fire"); shake(); }
+    if (S.scoop.t >= 5) { S.scoop = null; S.fuel = Math.min(100, S.fuel + T.scoopFuel); log(`SCOOP COMPLETE. +${T.scoopFuel} FUEL.`, "grn"); sfx("dock"); } }
+  if (S.travel && !S.landing) {
+    const v = speed(), to = S.travel.to, tp = bodyPos(to), aim = aimAt(to), d = dist(S.pos, aim);
+    if (v > 0 && d > 1e-6) { const st = Math.min(d, v * dt); S.pos.x += (aim.x - S.pos.x) / d * st; S.pos.y += (aim.y - S.pos.y) / d * st; }
+    if (S.fuel > 0 && S.boost <= 0) { S.fuel = Math.max(0, S.fuel - T.fuelPerEng2 * S.eff.eng * S.eff.eng * dt); if (S.fuel <= 0 && !S.dry) { S.dry = true; log("TANKS DRY. ION TRICKLE ONLY. FIND FUEL: SCOOP BRANN OR SALVAGE IT.", "alert"); } }
+    if (S.fuel > 0) S.dry = false;
+    S.trailT -= dt; if (S.trailT <= 0) { S.trailT = .4; S.trail.push({ ...S.pos }); if (S.trail.length > 90) S.trail.shift(); }
+    // slingshot window while passing Brann
+    const bp = bodyPos("brann"), nearB = dist(S.pos, bp) < SYS.sling && to !== "brann" && to !== "aurora";
+    if (nearB && !S.sling) { S.sling = { t: 0, done: false }; log("PASSING BRANN. SLINGSHOT WINDOW OPEN: HIT SLING ON THE GREEN.", "grn"); sfx("relay"); }
+    if (!nearB && S.sling) S.sling = null;
+    if (S.sling) S.sling.t += dt;
+    if (dist(S.pos, tp) < .012 + (body(to).size || 0)) arrive();
+  }
+  if (S.landing) S.pos = { ...bodyPos("halcyon") };
+  hazards(dt);
+  // reveal what sensors can reach
+  const range = .14 + .1 * S.eff.sens;
+  SYS.bodies.forEach(b => { if (S.seen.has(b.id)) return; const d = dist(S.pos, bodyPos(b));
+    if (b.veil ? d < .03 : d < range) { S.seen.add(b.id); if (!b.known) { log(`SENSORS: ${b.name} IDENTIFIED.`, b.type === "hostile" ? "alert" : "grn"); sfx("blip"); } } });
+  // hostiles close in
+  SYS.bodies.forEach(b => {
+    if (b.type !== "hostile" || S.done.has(b.id)) return;
+    const E = D.ENEMIES[b.enemy], p = bodyPos(b), d = dist(S.pos, p);
+    if (S.combat && S.combat.id === b.id) {
+      const f = S.foes[b.id] || (S.foes[b.id] = { ...p }); if (d > .02) { const st = Math.min(d - .02, E.chase * dt); f.x += (S.pos.x - f.x) / d * st; f.y += (S.pos.y - f.y) / d * st; }
+      if (d > E.range * 1.7) { log(`${E.name} FALLING BEHIND. CONTACT LOST.`, "grn"); sfx("relay"); S.combat = null; if (S.mode === "radar") setMode("nav"); }
+    } else if (!S.combat && d < E.range) startCombat(b);
+  });
+}
+function hazards(dt) {
+  const r = Math.hypot(S.pos.x, S.pos.y), moving = S.travel && !S.landing ? S.eff.eng * (S.boost > 0 ? 2 : 1) : 0;
+  const inBelt = r > SYS.belt[0] && r < SYS.belt[1], inVeil = dist(S.pos, bodyPos("brann")) < SYS.veil;
+  if (inBelt !== S.inBelt) { S.inBelt = inBelt; if (inBelt) log(moving > 2 ? "ENTERING THE ICE BELT AT SPEED. THROTTLE DOWN OR RAISE SHIELDS." : "ENTERING THE ICE BELT.", moving > 2 ? "alert" : ""); }
+  if (inVeil !== S.inVeil) { S.inVeil = inVeil; if (inVeil) log("INSIDE THE VEIL. SENSORS BLIND. LIGHTNING EVERYWHERE.", "alert"); }
+  const shieldSave = Math.min(.85, S.eff.shd * .3);
+  if (inBelt && moving && Math.random() < .06 * moving * moving * dt) {
+    if (Math.random() < shieldSave) { log("MICROMETEORITE. SHIELDS HELD.", "grn"); sfx("shield"); }
+    else { S.hull -= 1; log("MICROMETEORITE STRIKE! HULL -1.", "alert"); sfx("hit"); shake(); if (Math.random() < .35) randomIncident("breach"); if (S.hull <= 0) return lose("hull"); }
+  }
+  if (inVeil && Math.random() < (moving ? .12 : .05) * dt) {
+    if (Math.random() < shieldSave) { log("LIGHTNING ARCS ACROSS THE SHIELDS.", "grn"); sfx("shield"); }
+    else { log("LIGHTNING STRIKE! ELECTRICAL FIRE.", "alert"); sfx("hit"); shake(); randomIncident("fire"); }
+  }
+}
+function slingPhase() { const k = (S.sling.t * .9) % 2; return k < 1 ? k : 2 - k; } // needle sweeps 0→1→0
+function slingshot() {
+  if (!S.sling || S.sling.done) return; S.sling.done = true;
+  const p = slingPhase();
+  if (p > .4 && p < .6) { S.boost = T.slingTime; log(`SLINGSHOT! BRANN THROWS US FORWARD. DOUBLE SPEED, NO FUEL, ${T.slingTime} SECONDS.`, "grn"); sfx("win"); }
+  else { S.hull -= 1; S.heat = Math.min(100, S.heat + 12); log("BAD ANGLE. HULL STRESS -1.", "alert"); sfx("hit"); shake(); if (S.hull <= 0) lose("hull"); }
+  renderActions();
 }
 function arrive() {
-  const id = S.travel.to; S.travel = null; S.at = id; S.target = null; S.visited.add(id);
-  const n = node(id); sfx("relay");
-  log(`ARRIVED: ${n.name}.`, "grn"); log(D.ARRIVE[n.type]);
-  if (n.type === "beacon" && !S.done.has(id)) { S.done.add(id); log("BEACON 7 BUFFER DUMPED TO CASSETTE.", "grn"); addTape("hale"); }
-  if (n.type === "rocks" && !S.done.has(id)) {
-    S.done.add(id); const layers = S.eff.shd;
-    const dmg = Math.max(0, 4 - layers * 2); S.hull -= dmg; S.scrap += 3; S.fuel += 1;
-    log(dmg ? `ICE STRIKES: HULL -${dmg}. MINED 3 SCRAP, 1 FUEL.` : "SHIELDS DEFLECT THE ICE. MINED 3 SCRAP, 1 FUEL.", dmg ? "alert" : "grn");
-    if (dmg) { shake(); if (Math.random() < .6) randomIncident("breach"); } if (S.hull <= 0) return lose("hull");
-  }
-  if (n.type === "hostile" && !S.done.has(id)) startCombat(n);
-  if (n.type === "gate") return win();
+  const id = S.travel.to, b = body(id);
+  if (b.id === "halcyon") { S.landing = true; S.sling = null; log("HALCYON ORBIT INSERTION. WE'RE COMING IN FAST. BRAKE BURN OR AEROBRAKE?", "alert"); sfx("alarm"); renderActions(); return; }
+  S.travel = null; S.sling = null; S.at = id; S.target = null; S.visited.add(id); S.seen.add(id); sfx("relay");
+  log(`ARRIVED: ${b.name}.`, "grn"); if (D.ARRIVE[b.type]) log(D.ARRIVE[b.type]);
+  if (b.type === "beacon" && !S.done.has(id)) { S.done.add(id); log("BEACON 7 BUFFER DUMPED TO CASSETTE.", "grn"); addTape("hale"); }
   if (S.mode === "nav") renderActions();
 }
-function revealed(id) {
-  if (S.visited.has(id)) return true;
-  const s = S.eff.sens; if (s >= 2) return true;
-  if (s >= 1) return linked(S.at, id);
-  return false;
+function scoop() {
+  if (S.at !== "brann" || S.scoop) return;
+  S.scoop = { t: 0 }; log("DIPPING INTO BRANN'S CLOUDS. WATCH THE HEAT.", "alert"); sfx("launch"); renderActions();
+}
+function land(how) {
+  if (how === "burn") {
+    if (S.fuel < T.brakeFuel || S.eff.eng < 1) { log(S.eff.eng < 1 ? "NO ENGINE POWER FOR A BRAKE BURN." : "NOT ENOUGH FUEL TO BRAKE. AEROBRAKE IT IS.", "alert"); sfx("err"); return; }
+    S.fuel -= T.brakeFuel; log(`BRAKE BURN. -${T.brakeFuel} FUEL. SOFT ENTRY.`, "grn"); sfx("jump"); return win("burn");
+  }
+  const dmg = Math.max(0, 2 + S.eff.eng - S.eff.shd);
+  S.hull -= dmg; S.heat = Math.min(100, S.heat + 25); shake(); sfx("hit");
+  log(dmg ? `AEROBRAKE! THE HULL SCREAMS. HULL -${dmg}.` : "AEROBRAKE. SHIELDS TAKE THE HEAT. PERFECT ENTRY.", dmg ? "alert" : "grn");
+  if (S.hull <= 0) return lose("burnup");
+  win("aero");
+}
+function revealed(b) {
+  if (typeof b === "string") b = body(b);
+  return b.known || S.seen.has(b.id) || S.visited.has(b.id);
 }
 
 /* ── SHIP: build / demolish rooms ── */
@@ -139,8 +218,8 @@ function demolish(i) {
 
 /* ── DRONE: explore a derelict ── */
 function dock() {
-  const n = node(S.at);
-  if (!n.map || S.done.has(S.at)) return;
+  const n = S.at && body(S.at);
+  if (!n || !n.map || S.done.has(S.at)) return;
   if (!has("drone")) { log("NO DRONE BAY. BUILD ONE ON THE SHIP SCREEN.", "alert"); sfx("err"); return; }
   if (S.eff.drone < 1) { log("DRONE BAY HAS NO POWER. RAISE THE DRONE FADER.", "alert"); sfx("err"); return; }
   const M = D.MAPS[n.map], grid = M.grid.map(r => r.split(""));
@@ -158,11 +237,11 @@ function droneMove(dx, dy) {
   E.pos = { x: nx, y: ny }; E.bat -= T.droneMove; see(1); sfx("step");
   const cargo = has("cargo") ? 1 : 0;
   if (c === "S") { const n = 2 + cargo; E.carry.scrap += n; E.grid[ny][nx] = "."; log(`SALVAGE: +${n} SCRAP IN DRONE HOLD.`, "grn"); sfx("pick"); }
-  if (c === "F") { E.carry.fuel += 2; E.grid[ny][nx] = "."; log("FUEL CELL: +2 FUEL IN DRONE HOLD.", "grn"); sfx("pick"); }
+  if (c === "F") { E.carry.fuel += 15; E.grid[ny][nx] = "."; log("FUEL CELL: +15 FUEL IN DRONE HOLD.", "grn"); sfx("pick"); }
   if (c === "O") { E.carry.o2 += 30; E.grid[ny][nx] = "."; log("OXYGEN CANISTER: +30 O₂ IN DRONE HOLD.", "grn"); sfx("pick"); }
   if (c === "L") { E.grid[ny][nx] = "."; log(E.M.logs[E.logI++] || "LOG CORRUPTED."); sfx("blip"); }
   if (c === "K") { E.grid[ny][nx] = "."; E.carry.tape = E.M.tape; log("CASSETTE TAPE FOUND. IT'LL PLAY WHEN THE DRONE DOCKS.", "grn"); sfx("pick"); }
-  if (c === "C") { E.grid[ny][nx] = "."; S.core = true; log(E.M.core, "grn"); sfx("pick"); }
+  if (c === "C") { E.grid[ny][nx] = "."; S.core = true; S.seen.add("aurora"); log(E.M.core, "grn"); sfx("pick"); }
   if (c === "X") { E.bat -= 12; log("FIRE! DRONE SCORCHED. BATTERY -12.", "alert"); sfx("hit"); }
   // Active sentries shoot anything that passes next to them
   [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([ax, ay]) => { const tx = nx + ax, ty = ny + ay; if (E.grid[ty] && E.grid[ty][tx] === "T" && !E.jammed.has(tx + "," + ty)) { E.bat -= 30; log("SENTRY FIRE! BATTERY -30.", "alert"); sfx("hit"); shake(); } });
@@ -178,7 +257,7 @@ function droneScan() {
 function droneRecall() {
   const E = S.explore; if (!E) return;
   if (E.grid[E.pos.y][E.pos.x] !== "A") { log("DRONE MUST RETURN TO THE AIRLOCK (A) TO DOCK.", "alert"); sfx("err"); return; }
-  S.scrap += E.carry.scrap; S.fuel += E.carry.fuel; S.o2 = Math.min(100, S.o2 + E.carry.o2);
+  S.scrap += E.carry.scrap; S.fuel = Math.min(100, S.fuel + E.carry.fuel); S.o2 = Math.min(100, S.o2 + E.carry.o2);
   log(`DRONE DOCKED. UNLOADED ${E.carry.scrap} SCRAP, ${E.carry.fuel} FUEL, ${E.carry.o2} O₂.`, "grn"); sfx("dock");
   if (E.carry.tape) addTape(E.carry.tape);
   S.done.add(S.at); S.explore = null; setMode("nav");
@@ -187,10 +266,10 @@ function droneLost() { log("DRONE BATTERY DEAD. SIGNAL LOST. EVERYTHING IT CARRI
 
 /* ── RADAR: battle ── */
 function startCombat(n) {
-  const E = D.ENEMIES[n.enemy];
-  S.combat = { E, hull: E.hull, sh: E.shields, shT: 0, fireT: E.fireEvery * .7, wpn: 0, layers: S.eff.shd, layerT: 0, shots: [], hits: [] };
+  const E = D.ENEMIES[n.enemy]; S.seen.add(n.id);
+  S.combat = { id: n.id, E, hull: E.hull, sh: E.shields, shT: 0, fireT: E.fireEvery * .7, wpn: 0, layers: S.eff.shd, layerT: 0, shots: [], hits: [] };
   log(E.hail, "alert"); log(`${E.name} ON RADAR. HULL ${E.hull}, SHIELDS ${E.shields}.`, "alert");
-  if (!has("weapon")) log("NO WEAPON BAY. PLOT A JUMP AND CHARGE ENGINES TO ESCAPE.", "alert");
+  if (!has("weapon")) log("NO WEAPON BAY. OUTRUN THEM: MORE POWER TO ENG.", "alert");
   sfx("alarm"); setMode("radar");
 }
 function combatTick(dt) {
@@ -217,22 +296,29 @@ function combatTick(dt) {
   });
   C.shots = C.shots.filter(s => s.t < 1); C.hits.forEach(h => h.t += dt); C.hits = C.hits.filter(h => h.t < .6);
   if (S.hull <= 0) return lose("hull");
-  if (C.hull <= 0) { const L = E.loot; S.scrap += L.scrap; S.fuel += L.fuel; S.done.add(S.at); log(`${E.name} DESTROYED. SALVAGED ${L.scrap} SCRAP, ${L.fuel} FUEL.`, "grn"); sfx("win"); S.combat = null; setMode("nav"); }
+  if (C.hull <= 0) { const L = E.loot; S.scrap += L.scrap; S.fuel = Math.min(100, S.fuel + L.fuel); S.done.add(C.id); if (S.target === C.id) { S.target = null; if (S.travel) cutEngines(); } log(`${E.name} DESTROYED. SALVAGED ${L.scrap} SCRAP, ${L.fuel} FUEL.`, "grn"); sfx("win"); S.combat = null; setMode("nav"); }
 }
 function fire() { const C = S.combat; if (!C || C.wpn < 100) return; C.wpn = 0; C.shots.push({ from: "us", t: 0 }); sfx("fire"); }
 
 /* ── End states ── */
 function lose(why) {
-  S.over = true; sfx("alarm");
-  endScreen(why === "hull" ? "HULL BREACH" : "LIFE SUPPORT FAILURE", why === "hull" ? "THE MERIDIAN BROKE APART. HER BEACON IS STILL BLINKING FOR ANYONE WHO COMES LOOKING." : "THE AIR RAN OUT BEFORE THE POWER DID. SOL KEPT THE LIGHTS ON ANYWAY.", "amber");
+  if (S.over) return; S.over = true; sfx("alarm");
+  const T0 = { hull: ["HULL BREACH", "THE MERIDIAN BROKE APART. HER BEACON IS STILL BLINKING FOR ANYONE WHO COMES LOOKING."],
+    burnup: ["BURNED UP ON ENTRY", "SO CLOSE. HALCYON'S SKY LIT UP FOR A MOMENT. SOMEONE DOWN THERE SAW IT."],
+    o2: ["LIFE SUPPORT FAILURE", "THE AIR RAN OUT BEFORE THE POWER DID. SOL KEPT THE LIGHTS ON ANYWAY."] }[why] || ["LOST", ""];
+  endScreen(T0[0], T0[1], "amber");
 }
-function win() {
-  S.over = true; sfx("win");
-  endScreen("SECTOR 1 CLEARED", `JUMP GATE ENGAGED ON DAY ${Math.max(1, Math.round(S.time / 20))}. HULL ${S.hull}/${S.maxHull}. ${S.core ? "THE TESSERA DATA CORE IS ABOARD: THE AURORA WENT INTO THE VEIL ON PURPOSE." : "SOMEWHERE BACK THERE, A DATA CORE WENT UNREAD."}\n\nSECTORS 2 TO 5 AND HALCYON: NEXT BUILD.`, "");
+function win(how) {
+  if (S.over) return; S.over = true; sfx("win");
+  const days = Math.max(1, Math.round(S.time / 6));
+  const story = S.tapes.includes("aurora") ? "THE AURORA'S COUNT IS STILL GOING ON THE COMMS. SOMEONE DOWN THERE IS STILL COUNTING. WE BROUGHT COFFEE."
+    : S.core ? "THE AURORA WENT INTO THE VEIL ON PURPOSE. WE NEVER FOUND OUT WHY. THE COUNT GOES ON WITHOUT US."
+    : "A STRANGE COUNT CRACKLES ON THE COMMS. NOBODY ABOARD KNOWS WHAT IT MEANS.";
+  endScreen("LANDED ON HALCYON", `${how === "aero" ? "AEROBRAKED IN" : "BRAKE BURN, SOFT ENTRY"}. DAY ${days} OF THE CROSSING. HULL ${S.hull}/${S.maxHull}.\n${story}`, "");
 }
 function endScreen(title, text, cls) {
   const ov = $("#ovEnd"), lines = [`*** MERIDIAN SHIP CONTROL · MISSION PRINTOUT ***`, ``, title, `-`.repeat(title.length), ``, ...text.split("\n"), ``,
-    `HULL ........ ${Math.max(0, S.hull)}/${S.maxHull}`, `FUEL ........ ${S.fuel}`, `SCRAP ....... ${S.scrap}`, `TAPES FOUND . ${S.tapes.length}/${Object.keys(D.TAPES).length}`, `ROOMS BUILT . ${S.layout.filter(Boolean).length}/9`, ``, `END OF PRINTOUT. TEAR ALONG PERFORATION.`];
+    `HULL ........ ${Math.max(0, S.hull)}/${S.maxHull}`, `FUEL ........ ${Math.round(S.fuel)}`, `SCRAP ....... ${S.scrap}`, `TAPES FOUND . ${S.tapes.length}/${Object.keys(D.TAPES).length}`, `ROOMS BUILT . ${S.layout.filter(Boolean).length}/9`, ``, `END OF PRINTOUT. TEAR ALONG PERFORATION.`];
   ov.innerHTML = `<div class="paper"><div class="feed" id="feed"></div><button class="big grn go" id="again" type="button" hidden>Reboot</button></div>`;
   ov.hidden = false; say(title + ". " + text.split("\n")[0], true);
   const feed = $("#feed"); let i = 0;
@@ -246,7 +332,7 @@ function log(t, cls = "") { termLines.push({ t, cls }); if (termLines.length > 6
 function renderTerm() {
   $("#term").innerHTML = termLines.map((l, i) => `<p class="${l.cls}${i < termLines.length - 3 ? " old" : ""}">&gt; ${esc(l.t)}${i === termLines.length - 1 ? ' <span class="cursor"></span>' : ""}</p>`).join("");
 }
-function bootLog() { log("MERIDIAN SHIP CONTROL ONLINE.", "grn"); D.CREW.forEach(c => log(c)); log("PLOT A COURSE ON THE NAV SCOPE: TAP A LINKED POINT."); }
+function bootLog() { log("MERIDIAN SHIP CONTROL ONLINE.", "grn"); D.CREW.forEach(c => log(c)); log("HALCYON IS INSYSTEM. TAP ANY BODY ON THE NAV SCOPE, THEN BURN."); }
 
 /* ── Monitor modes ── */
 function setMode(m) {
@@ -262,10 +348,20 @@ document.querySelectorAll(".sel-btn").forEach(b => b.addEventListener("click", (
 function renderActions() {
   const a = $("#actions"), m = S.mode;
   if (m === "nav") {
-    const n = node(S.at), canDock = n.map && !S.done.has(S.at);
-    a.innerHTML = `<div class="info" id="navInfo"></div><div class="charge"><span class="plate">Jump drive</span><div class="bar"><i id="chg"></i></div></div>
-      ${canDock ? `<button class="big blu" id="bDock" type="button">Dock</button>` : ""}<button class="big red" id="bEngage" type="button">Engage</button>`;
+    navKey = navState();
+    if (S.landing) {
+      a.innerHTML = `<div class="info">HALCYON ENTRY. BRAKE BURN COSTS ${T.brakeFuel} FUEL. AEROBRAKE IS FREE BUT HURTS: LESS ENG AND MORE SHIELDS = SOFTER.</div>
+        <button class="big yel" id="bBrake" type="button">Brake burn</button><button class="big red" id="bAero" type="button">Aerobrake</button>`;
+      $("#bBrake").addEventListener("click", () => land("burn")); $("#bAero").addEventListener("click", () => land("aero")); return;
+    }
+    const n = S.at && body(S.at), canDock = n && n.map && !S.done.has(S.at), canScoop = S.at === "brann" && !S.scoop;
+    const sl = S.sling && !S.sling.done;
+    a.innerHTML = `<div class="info" id="navInfo"></div>
+      ${sl ? `<div class="charge"><span class="plate">Slingshot</span><div class="bar sling"><b></b><i id="needle"></i></div></div><button class="big grn" id="bSling" type="button">Sling</button>` : ""}
+      ${canDock ? `<button class="big blu" id="bDock" type="button">Dock</button>` : ""}${canScoop ? `<button class="big yel" id="bScoop" type="button">Scoop fuel</button>` : ""}
+      <button class="big red" id="bEngage" type="button">${S.travel ? "Cut engines" : "Burn"}</button>`;
     $("#bEngage").addEventListener("click", engage); if (canDock) $("#bDock").addEventListener("click", dock);
+    if (canScoop) $("#bScoop").addEventListener("click", scoop); if (sl) $("#bSling").addEventListener("click", slingshot);
   } else if (m === "drone") {
     if (!S.explore) { a.innerHTML = `<div class="info">NO DRONE DEPLOYED. DOCK AT A DERELICT FROM THE NAV SCOPE.</div>`; return; }
     a.innerHTML = `<div class="dpad"><button class="up" data-d="0,-1" type="button" aria-label="Drone north">▲</button><button class="lt" data-d="-1,0" type="button" aria-label="Drone west">◀</button><span class="mid"></span><button class="rt" data-d="1,0" type="button" aria-label="Drone east">▶</button><button class="dn" data-d="0,1" type="button" aria-label="Drone south">▼</button></div>
@@ -276,8 +372,10 @@ function renderActions() {
   } else if (m === "radar") {
     if (!S.combat) { a.innerHTML = `<div class="info">NO CONTACTS. RADAR QUIET.</div>`; return; }
     a.innerHTML = `<div class="charge"><span class="plate">Mass driver</span><div class="bar"><i id="wchg"></i></div><span class="plate">Shield layers</span><div class="layers" id="lay"></div></div>
-      <button class="big red" id="bFire" type="button">Fire</button><button class="big yel" id="bFlee" type="button">Jump out</button>`;
-    $("#bFire").addEventListener("click", fire); $("#bFlee").addEventListener("click", () => { if (!S.target) { log("PLOT AN ESCAPE ON THE NAV SCOPE, THEN CHARGE ENGINES.", "alert"); setMode("nav"); } else engage(); });
+      <button class="big red" id="bFire" type="button">Fire</button><button class="big yel" id="bFlee" type="button">Full burn</button>`;
+    $("#bFire").addEventListener("click", fire); $("#bFlee").addEventListener("click", () => {
+      if (!S.target) { log("PLOT A COURSE ON THE NAV SCOPE, THEN BURN AWAY.", "alert"); setMode("nav"); return; }
+      S.alloc.eng = 4; sfx("click"); log("ALL POWER TO ENGINES. RUN!", "alert"); if (!S.travel) engage(); });
   } else {
     const fires = Object.keys(S.incidents).map(Number);
     if (fires.length) return showIncident(S.sel != null && S.incidents[S.sel] ? S.sel : fires[0]);
@@ -294,11 +392,18 @@ function ui() {
   const d = demand(), sp = supply(); $("#loadBar").style.width = clamp(d / Math.max(1, T.reactorMax), 0, 1) * 100 + "%";
   $("#loadTxt").textContent = `${d} / ${sp} PWR`; $("#supply").classList.toggle("over", S.overload);
   updateFaders();
-  if (S.mode === "nav" && $("#chg")) {
-    $("#chg").style.width = S.charge + "%";
-    const t = S.target && node(S.target);
-    $("#navInfo").textContent = S.travel ? "IN TRANSIT…" : t ? `TARGET: ${revealed(S.target) ? t.name : "UNKNOWN"} · ${jumpCost(S.target)} FUEL · ${S.charge < 100 ? (S.eff.eng ? "CHARGING" : "NO ENGINE POWER") : "READY"}` : `AT: ${node(S.at).name}. TAP A LINKED POINT.`;
-    const e = $("#bEngage"); e.disabled = !(S.target && S.charge >= 100 && !S.travel); e.classList.toggle("ready", !e.disabled);
+  if (S.mode === "nav" && navState() !== navKey) renderActions();
+  if (S.mode === "nav" && $("#navInfo")) {
+    const t = S.target && body(S.target), v = speed();
+    let info;
+    if (t) {
+      const d = dist(S.pos, aimAt(S.target)), eta = v > 0 ? d / v : Infinity, cost = S.fuel > 0 && S.boost <= 0 ? T.fuelPerEng2 * S.eff.eng * S.eff.eng * eta : 0;
+      info = `${S.travel ? "BURNING FOR" : "TARGET"}: ${revealed(t) ? t.name : "UNKNOWN CONTACT"} · ${isFinite(eta) ? `ETA ${Math.ceil(eta)}S · ~${Math.ceil(cost)} FUEL` : "NO THRUST"}${S.boost > 0 ? " · SLINGSHOT" : ""}${S.fuel <= 0 ? " · TANKS DRY" : ""}`;
+    } else info = S.at ? `AT: ${body(S.at).name}. TAP A BODY TO PLOT A COURSE.` : "ADRIFT. TAP A BODY TO PLOT A COURSE.";
+    if (S.scoop) info = `SCOOPING FUEL… ${Math.round(S.scoop.t / 5 * 100)}%`;
+    $("#navInfo").textContent = info;
+    const e = $("#bEngage"); if (e) { e.disabled = !S.travel && !S.target; e.classList.toggle("ready", !S.travel && !!S.target && S.eff.eng > 0); }
+    if (S.sling && $("#needle")) $("#needle").style.left = slingPhase() * 100 + "%";
   }
   if (S.mode === "drone" && S.explore && $("#dbat")) {
     const E = S.explore; $("#dbat").style.width = clamp(E.bat / E.maxBat, 0, 1) * 100 + "%";
@@ -308,16 +413,17 @@ function ui() {
   if (S.mode === "radar" && S.combat && $("#wchg")) {
     const C = S.combat; $("#wchg").style.width = C.wpn + "%"; const f = $("#bFire"); f.disabled = !has("weapon") || C.wpn < 100; f.classList.toggle("ready", !f.disabled);
     $("#lay").innerHTML = Array.from({ length: Math.max(1, S.eff.shd) }, (_, i) => `<i class="${i < C.layers ? "on" : ""}"></i>`).join("");
-    const fl = $("#bFlee"); fl.classList.toggle("ready", !!S.target && S.charge >= 100);
+    const fl = $("#bFlee"); fl.classList.toggle("ready", !!S.target);
   }
   document.querySelector('.sel-btn[data-mode="radar"]').classList.toggle("alert", !!S.combat && S.mode !== "radar");
   document.querySelector('.sel-btn[data-mode="ship"]').classList.toggle("alert", Object.keys(S.incidents).length > 0 && S.mode !== "ship");
   lamp("#lFire", Object.keys(S.incidents).length > 0, true);
   tapeUI();
   document.querySelector('.sel-btn[data-mode="drone"]').classList.toggle("alert", !!S.explore && S.mode !== "drone");
-  $("#crtInfo").textContent = S.mode === "nav" ? D.SECTOR.name.split(" · ")[0] : S.mode === "drone" && S.explore ? `BAT ${Math.max(0, Math.round(S.explore.bat))}` : "";
+  $("#crtInfo").textContent = S.mode === "nav" ? `${SYS.name} · DAY ${Math.max(1, Math.round(S.time / 6))}` : S.mode === "drone" && S.explore ? `BAT ${Math.max(0, Math.round(S.explore.bat))}` : "";
 }
-let uiFrame = 0;
+let navKey = "";
+function navState() { return [S.at, !!S.travel, S.landing, S.sling ? (S.sling.done ? 2 : 1) : 0, !!S.scoop, S.at && S.done.has(S.at)].join("|"); }
 function a11yDpad(on) { document.querySelectorAll(".dpad button").forEach(b => b.disabled = !on); }
 function lamp(id, on, blink) { const l = $(id); l.classList.toggle("on", on); l.classList.toggle("blink", on && blink); l.classList.toggle("warn", on && !blink); }
 
@@ -501,36 +607,65 @@ function draw(t) {
 }
 const glowLine = (col, w = 1.6) => { g.strokeStyle = col; g.lineWidth = w * DPR; g.shadowColor = col; g.shadowBlur = 8 * DPR; };
 const txt = (s, x, y, col, size = 18, al = "center") => { g.shadowBlur = 6 * DPR; g.shadowColor = col; g.fillStyle = col; g.font = `${size * DPR}px VT323, monospace`; g.textAlign = al; g.fillText(s, x, y); };
-function navXY(n) { const pad = 34 * DPR; return [pad + n.x / 100 * (W - pad * 2), 44 * DPR + n.y / 100 * (H - 70 * DPR)]; }
+let navScale = 1, navC = [0, 0];
+function toScr(p) { return [navC[0] + p.x * navScale, navC[1] + p.y * navScale]; }
+const BELT = Array.from({ length: 170 }, (_, i) => ({ a: Math.random() * TAU, r: D.SYSTEM.belt[0] + Math.random() * (D.SYSTEM.belt[1] - D.SYSTEM.belt[0]), s: Math.random() < .2 ? 2 : 1.2 }));
 function drawNav(t) {
-  g.shadowBlur = 0; g.strokeStyle = "rgba(109,255,138,.08)"; g.lineWidth = 1;
-  for (let x = 0; x < W; x += 30 * DPR) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
-  for (let y = 0; y < H; y += 30 * DPR) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
-  D.SECTOR.links.forEach(([a, b]) => {
-    const A = navXY(node(a)), B = navXY(node(b)), act = (a === S.at && b === S.target) || (b === S.at && a === S.target), near = a === S.at || b === S.at;
-    glowLine(act ? GRN : near ? "rgba(109,255,138,.55)" : GRN_D, act ? 2.2 : 1.2); g.setLineDash(act ? [] : [4 * DPR, 6 * DPR]);
-    g.beginPath(); g.moveTo(...A); g.lineTo(...B); g.stroke();
+  navC = [W / 2, H / 2 + 8 * DPR]; navScale = Math.min(W / 2 - 14 * DPR, H / 2 - 26 * DPR);
+  const R = navScale, [cx, cy] = navC;
+  // range rings
+  g.shadowBlur = 0; g.strokeStyle = "rgba(109,255,138,.07)"; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(cx - R, cy); g.lineTo(cx + R, cy); g.moveTo(cx, cy - R); g.lineTo(cx, cy + R); g.stroke();
+  // orbits
+  SYS.bodies.forEach(b => {
+    if (b.type === "hostile" || (!revealed(b) && !b.known)) return;
+    const c = b.parent ? toScr(bodyPos(b.parent)) : navC;
+    g.strokeStyle = "rgba(109,255,138,.16)"; g.setLineDash([2 * DPR, 5 * DPR]); g.beginPath(); g.arc(c[0], c[1], b.r * R, 0, TAU); g.stroke();
   });
   g.setLineDash([]);
-  D.SECTOR.nodes.forEach(n => {
-    const [x, y] = navXY(n), known = revealed(n.id), done = S.done.has(n.id), col = n.type === "hostile" && known && !done ? RED : GRN;
-    glowLine(col, 1.8); const s = 7 * DPR;
-    g.beginPath();
-    if (!known) { txt("?", x, y + 6 * DPR, GRN_D, 22); }
-    else if (n.type === "hostile") { g.moveTo(x - s, y - s); g.lineTo(x + s, y + s); g.moveTo(x + s, y - s); g.lineTo(x - s, y + s); g.stroke(); }
-    else if (n.type === "gate") { g.arc(x, y, s * 1.4, 0, TAU); g.stroke(); g.beginPath(); g.arc(x, y, s * .6, 0, TAU); g.stroke(); }
-    else if (n.type === "derelict" || n.type === "station") { g.rect(x - s, y - s, s * 2, s * 2); g.stroke(); if (done) { g.beginPath(); g.moveTo(x - s, y + s); g.lineTo(x + s, y - s); g.stroke(); } }
-    else if (n.type === "rocks") { for (let i = 0; i < 4; i++) { g.beginPath(); g.arc(x + Math.cos(i * 1.7) * s, y + Math.sin(i * 1.7) * s * .8, 2.2 * DPR, 0, TAU); g.stroke(); } }
-    else if (n.type === "beacon") { g.moveTo(x, y - s); g.lineTo(x + s, y + s); g.lineTo(x - s, y + s); g.closePath(); g.stroke(); }
-    else { g.arc(x, y, 3 * DPR, 0, TAU); g.stroke(); }
-    if (known) txt(n.name, x, y + 22 * DPR, col, 15);
-    if (n.id === S.target) { glowLine(GRN, 1.5); const b = 14 * DPR + Math.sin(t * 6) * 2 * DPR; [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([dx, dy]) => { g.beginPath(); g.moveTo(x + dx * b, y + dy * b * .6); g.lineTo(x + dx * b, y + dy * b); g.lineTo(x + dx * b * .6, y + dy * b); g.stroke(); }); }
+  // the ice belt
+  const rot = S.time * .004; g.fillStyle = "rgba(109,255,138,.4)";
+  BELT.forEach(k => { const a = k.a + rot * (1 - k.r); g.fillRect(cx + Math.cos(a) * k.r * R, cy + Math.sin(a) * k.r * R, k.s * DPR, k.s * DPR); });
+  // the star
+  const pul = 1 + Math.sin(t * 2) * .08;
+  g.fillStyle = AMB; g.shadowColor = AMB; g.shadowBlur = 24 * DPR; g.beginPath(); g.arc(cx, cy, 7 * DPR * pul, 0, TAU); g.fill();
+  glowLine(AMB, 1); for (let i = 0; i < 8; i++) { const a = i / 8 * TAU + t * .2; g.beginPath(); g.moveTo(cx + Math.cos(a) * 11 * DPR, cy + Math.sin(a) * 11 * DPR); g.lineTo(cx + Math.cos(a) * 17 * DPR, cy + Math.sin(a) * 17 * DPR); g.stroke(); }
+  txt(SYS.star, cx, cy + 30 * DPR, AMB_D, 14);
+  // Brann: the Veil and the slingshot zone
+  const bp = toScr(bodyPos("brann"));
+  glowLine("rgba(109,255,138,.35)", 1); g.beginPath();
+  for (let i = 0; i <= 60; i++) { const a = i / 60 * TAU, rr = (SYS.veil + Math.sin(a * 7 + t * 2) * .006) * R; g[i ? "lineTo" : "moveTo"](bp[0] + Math.cos(a) * rr, bp[1] + Math.sin(a) * rr); } g.stroke();
+  if (S.travel && S.travel.to !== "brann") { glowLine(S.sling ? GRN : "rgba(109,255,138,.3)", 1); g.setLineDash([3 * DPR, 4 * DPR]); g.beginPath(); g.arc(bp[0], bp[1], SYS.sling * R, 0, TAU); g.stroke(); g.setLineDash([]); if (!S.sling) txt("SLING ZONE", bp[0], bp[1] - SYS.sling * R - 4 * DPR, GRN_D, 13); }
+  // bodies
+  SYS.bodies.forEach(b => {
+    const [x, y] = toScr(bodyPos(b)), known = revealed(b), done = S.done.has(b.id), s = 6 * DPR;
+    if (b.type === "hostile" && done) { glowLine(GRN_D, 1); g.beginPath(); g.moveTo(x - 3 * DPR, y - 3 * DPR); g.lineTo(x + 3 * DPR, y + 3 * DPR); g.stroke(); return; }
+    if (b.veil && !known) return;               // hidden in the storm
+    const col = b.type === "hostile" && known ? RED : b.type === "halcyon" ? AMB : GRN;
+    glowLine(col, 1.8); g.beginPath();
+    if (!known) { txt("?", x, y + 6 * DPR, GRN_D, 20); }
+    else if (b.type === "giant") { const r = b.size * R; g.arc(x, y, r, 0, TAU); g.stroke(); for (let k = -1; k <= 1; k++) { g.beginPath(); g.ellipse(x, y + k * r * .4, r * Math.sqrt(1 - (k * .4) ** 2), r * .12, 0, 0, TAU); g.stroke(); } }
+    else if (b.type === "halcyon") { const r = b.size * R; g.arc(x, y, r, 0, TAU); g.stroke(); g.beginPath(); g.arc(x, y, r + 4 * DPR + Math.sin(t * 3) * DPR, 0, TAU); g.globalAlpha = .5; g.stroke(); g.globalAlpha = 1; }
+    else if (b.type === "hostile") { g.moveTo(x - s, y - s); g.lineTo(x + s, y + s); g.moveTo(x + s, y - s); g.lineTo(x - s, y + s); g.stroke(); }
+    else if (b.type === "derelict" || b.type === "station") { g.rect(x - s, y - s, s * 2, s * 2); g.stroke(); if (done) { g.beginPath(); g.moveTo(x - s, y + s); g.lineTo(x + s, y - s); g.stroke(); } }
+    else if (b.type === "beacon") { g.moveTo(x, y - s); g.lineTo(x + s, y + s); g.lineTo(x - s, y + s); g.closePath(); g.stroke(); if (!done && (t * 2 | 0) % 2) { g.beginPath(); g.arc(x, y, s * 2.2, 0, TAU); g.stroke(); } }
+    else { g.rect(x - s * .6, y - s * .6, s * 1.2, s * 1.2); g.stroke(); }
+    if (known) txt(b.name, x, y + ((b.size || 0) * R + 18 * DPR), col, 14);
+    if (b.id === S.target) { glowLine(GRN, 1.5); const q = (14 + (b.size || 0) * R / DPR) * DPR + Math.sin(t * 6) * 2 * DPR; [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([dx, dy]) => { g.beginPath(); g.moveTo(x + dx * q, y + dy * q * .6); g.lineTo(x + dx * q, y + dy * q); g.lineTo(x + dx * q * .6, y + dy * q); g.stroke(); }); }
   });
-  // The Meridian
-  let [sx, sy] = navXY(node(S.at));
-  if (S.travel) { const [ax, ay] = navXY(node(S.travel.from)), [bx, by] = navXY(node(S.travel.to)), k = S.travel.t; sx = ax + (bx - ax) * k; sy = ay + (by - ay) * k; }
-  if ((t * 2 | 0) % 2 || S.travel) { glowLine(AMB, 2); g.fillStyle = AMB; g.beginPath(); g.moveTo(sx, sy - 9 * DPR); g.lineTo(sx + 7 * DPR, sy + 6 * DPR); g.lineTo(sx - 7 * DPR, sy + 6 * DPR); g.closePath(); g.fill(); }
-  txt(`FUEL ${S.fuel}  ·  SENSORS ${S.eff.sens ? "RANGE " + S.eff.sens : "OFF"}`, 12 * DPR, H - 12 * DPR, GRN, 17, "left");
+  // our trail and plotted course
+  g.shadowBlur = 0; S.trail.forEach((p, i) => { g.fillStyle = `rgba(255,179,71,${.15 + .5 * i / S.trail.length})`; const [x, y] = toScr(p); g.fillRect(x - DPR, y - DPR, 2 * DPR, 2 * DPR); });
+  const [sx, sy] = toScr(S.pos);
+  if (S.target && !S.landing) { const [ax, ay] = toScr(aimAt(S.target)); glowLine(S.travel ? AMB : "rgba(255,179,71,.5)", 1.2); g.setLineDash([5 * DPR, 5 * DPR]); g.beginPath(); g.moveTo(sx, sy); g.lineTo(ax, ay); g.stroke(); g.setLineDash([]); g.beginPath(); g.arc(ax, ay, 4 * DPR, 0, TAU); g.stroke(); }
+  // the Meridian, pointing where she's going
+  const aim = S.target && !S.landing ? aimAt(S.target) : { x: S.pos.x + 1, y: S.pos.y }, ang = Math.atan2(aim.y - S.pos.y, aim.x - S.pos.x);
+  if ((t * 2 | 0) % 2 || S.travel) {
+    g.save(); g.translate(sx, sy); g.rotate(ang); glowLine(AMB, 2); g.fillStyle = AMB;
+    g.beginPath(); g.moveTo(10 * DPR, 0); g.lineTo(-6 * DPR, 6 * DPR); g.lineTo(-6 * DPR, -6 * DPR); g.closePath(); g.fill();
+    if (S.travel && speed() > T.drift) { g.beginPath(); g.moveTo(-8 * DPR, 0); g.lineTo(-(10 + S.eff.eng * 3 + Math.sin(t * 30) * 2) * DPR, 0); g.stroke(); }
+    g.restore();
+  }
+  txt(`FUEL ${Math.round(S.fuel)}  ·  ENG ${S.eff.eng}${S.boost > 0 ? " ×2" : ""}  ·  SENS ${S.eff.sens ? "R" + S.eff.sens : "OFF"}${S.inBelt ? "  ·  ICE BELT" : ""}${S.inVeil ? "  ·  VEIL" : ""}`, 10 * DPR, H - 10 * DPR, GRN, 16, "left");
 }
 function drawRadar(t) {
   const cx = W / 2, cy = H / 2 + 10 * DPR, R = Math.min(W, H) * .42;
@@ -541,7 +676,8 @@ function drawRadar(t) {
   glowLine(GRN, 2); g.beginPath(); g.moveTo(cx, cy - 10 * DPR); g.lineTo(cx + 8 * DPR, cy + 8 * DPR); g.lineTo(cx - 8 * DPR, cy + 8 * DPR); g.closePath(); g.stroke();
   const C = S.combat; if (!C) { txt("NO CONTACTS", cx, cy - R * .5, GRN, 24); return; }
   for (let i = 0; i < C.layers; i++) { glowLine(GRN, 1.5); g.beginPath(); g.arc(cx, cy, (22 + i * 7) * DPR, 0, TAU); g.stroke(); }
-  const ex = cx + Math.cos(-.9) * R * .72, ey = cy + Math.sin(-.9) * R * .72;
+  const fp = bodyPos(C.id), brg = Math.atan2(fp.y - S.pos.y, fp.x - S.pos.x), rr = clamp(dist(S.pos, fp) / (C.E.range * 1.7), .25, .95);
+  const ex = cx + Math.cos(brg) * R * rr, ey = cy + Math.sin(brg) * R * rr;
   glowLine(RED, 2); g.beginPath(); g.arc(ex, ey, 9 * DPR, 0, TAU); g.stroke(); g.beginPath(); g.moveTo(ex - 14 * DPR, ey); g.lineTo(ex + 14 * DPR, ey); g.stroke();
   for (let i = 0; i < C.sh; i++) { g.beginPath(); g.arc(ex, ey, (16 + i * 6) * DPR, 0, TAU); g.stroke(); }
   txt(`${C.E.name}  HULL ${Math.max(0, C.hull)}`, ex, ey - 26 * DPR, RED, 17);
@@ -691,14 +827,14 @@ $("#powerOn").addEventListener("click", () => { $("#ovBoot").hidden = true; boot
 cv.addEventListener("pointerdown", e => {
   const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * DPR, y = (e.clientY - r.top) * DPR;
   if (S.mode === "ship") { const i = roomAt(x, y); if (i >= 0) roomTapped(i); return; }
-  if (S.mode !== "nav" || S.travel) return;
-  let best = null, bd = 34 * DPR; D.SECTOR.nodes.forEach(n => { const [nx, ny] = navXY(n), d = Math.hypot(nx - x, ny - y); if (d < bd) { bd = d; best = n; } });
+  if (S.mode !== "nav") return;
+  let best = null, bd = 36 * DPR; SYS.bodies.forEach(b => { if (b.veil && !revealed(b)) return; if (b.type === "hostile" && S.done.has(b.id)) return; const [nx, ny] = toScr(bodyPos(b)), d = Math.hypot(nx - x, ny - y) - (b.size || 0) * navScale; if (d < bd) { bd = d; best = b; } });
   if (best) selectTarget(best.id);
 });
 addEventListener("keydown", e => {
   if (S.mode === "drone" && S.explore) { const m = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0], w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0] }[e.key]; if (m && !(e.target instanceof SVGElement) && !e.target.closest?.(".track")) { e.preventDefault(); droneMove(...m); } }
   if (e.key === " " && S.mode === "radar") { e.preventDefault(); fire(); }
 });
-window.__sjProbe = () => ({ S }); // read-only hook for automated playtests
+window.__sjProbe = () => ({ S, scr: id => toScr(bodyPos(id)).map(v => v / DPR) }); // read-only hook for automated playtests
 requestAnimationFrame(loop);
 })();
