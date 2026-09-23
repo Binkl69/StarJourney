@@ -124,7 +124,7 @@ Each milestone ends with something you can open and play/click.
 
 | # | Milestone | You can… |
 |---|---|---|
-| M1 | **Dashboard shell** — layout, panels, mission clock, fake live telemetry, styled to reference | See the look on desktop & phone |
+| M1 ✅ | **Dashboard shell** (`index.html`) — layout, panels, mission clock, fake live telemetry, styled to reference | See the look on desktop & phone |
 | M2 | **Run state + prepare screen** — pick 4 of 6 crew, cargo budget | Start a run with your chosen crew |
 | M3 | **Star map** — seeded branching map, travel costs fuel/time | Fly waypoint to waypoint |
 | M4 | **Event engine + first 10 cards** — conditions, choices, effects, story flags | Make story choices that change the ship/crew |
