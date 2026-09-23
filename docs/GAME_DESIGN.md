@@ -1,4 +1,12 @@
-# StarJourney — Game Design (v0.2)
+# StarJourney — Game Design (v0.3)
+
+> **v0.3 direction (product owner, after playing v2):** *Gameplay is the ship and survival; story is secondary. The look must be rich, not minimalist. The player is the ship's steering wheel, not the crew's babysitter.* Chosen: **cockpit view, phone-first.**
+>
+> **Cockpit game** (`index.html`, `flight.js`, `legs.js`, `vendor/three.min.js`): you fly the Meridian in first person through five legs to Halcyon. Drag anywhere to steer, hold BOOST, route 6 power units between engines (speed), shields (damage) and life support (O₂ drain). Survive hull, fuel and oxygen; collect fuel, O₂ and salvage parts; PATCH the hull or seal leaks mid-flight; solar flares demand shields *now*. Between legs: a short comms beat, a workshop (plating, tank, scrubbers, capacitor, O₂ refill) and a choice of next lane (Debris Belt, Gas Giant Skim, The Veil, Derelict Field, Ice Ring, Solar Flare Lane, then Halcyon Approach). Visuals are real-time 3D (three.js, MIT, vendored) with procedural nebula skies, lit asteroids, planets, wrecks, glowing pickups, speed streaks and a cracking canopy.
+>
+> Earlier prototypes live in `prototypes/` (v1 mission control, v2 The Veil story route). The v2 notes below are kept for history.
+
+# v0.2 (history)
 
 > **v0.2 direction change (agreed with product owner):** the v1 prototypes (mission-control dashboard; spreadsheet-style roguelite) missed the vision. They felt like spreadsheets, the story was thin, the player's role was wrong, and routes didn't feel different. **v2: "You're the Captain."** You're aboard the Meridian. A big viewport shows the journey; crew portraits react; resources shrink to a thin status strip. The spine is a mystery (the Aurora and Halcyon's signal), told across **three genuinely different routes** (The Veil, The Shallows, The Long Dark). Each route reveals one fragment of the truth, so the full picture takes several runs. First slice: **The Veil** (`index.html`, `story.js`, `engine.js`, `art.js`). The v1 prototypes live in `prototypes/v1-mission-control/`. Sections below that describe the dashboard-first design are kept for history.
 
