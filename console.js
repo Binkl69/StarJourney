@@ -25,17 +25,21 @@ function newGame() {
   S = { hull: D.START.hull, maxHull: D.START.hull, fuel: D.START.fuel, o2: D.START.o2, scrap: D.START.scrap,
     layout: D.START_LAYOUT.slice(), alloc: { eng: 2, life: 1, sens: 0, drone: 0, shd: 0, wpn: 0 }, eff: {},
     reactor: 4, heat: 12, coolant: false, scram: 0, charge: 0, at: "start", target: null, visited: new Set(["start"]), done: new Set(),
-    mode: "nav", sel: null, explore: null, combat: null, travel: null, time: 0, over: false, core: false };
+    mode: "nav", sel: null, explore: null, combat: null, travel: null, time: 0, over: false, core: false,
+    incidents: {}, tapes: [], tapeI: -1, crew: null };
+  S.crew = D.CREW_ABOARD.map(c => ({ ...c, room: roomOf(c.home), x: 0, y: 0, path: [], task: null, idle: 2 + Math.random() * 4, placed: false }));
   computePower();
 }
 const has = room => S.layout.includes(room);
+const roomOf = room => Math.max(0, (S ? S.layout : D.START_LAYOUT).indexOf(room));
 
 /* ── Power: reactor output is shared across the faders ── */
 function demand() { return SYSTEMS.reduce((n, s) => n + (has(s.room) ? S.alloc[s.k] : 0), 0) + (S.coolant ? 1 : 0); }
-function supply() { return S.scram > 0 ? 0 : S.reactor; }
+const burning = room => { const i = S.layout.indexOf(room); return i >= 0 && S.incidents[i] && S.incidents[i].type === "fire"; };
+function supply() { return S.scram > 0 ? 0 : Math.max(0, S.reactor - (burning("reactor") ? 3 : 0)); }
 function computePower() {
   const d = demand(), sp = supply(), ratio = d > sp ? sp / Math.max(1, d) : 1;
-  SYSTEMS.forEach(s => { S.eff[s.k] = has(s.room) ? Math.floor(S.alloc[s.k] * ratio + 1e-6) : 0; });
+  SYSTEMS.forEach(s => { S.eff[s.k] = has(s.room) && !burning(s.room) ? Math.floor(S.alloc[s.k] * ratio + 1e-6) : 0; });
   S.overload = d > sp;
 }
 function safePoint() { return T.safeOutput + (has("battery") ? 2 : 0) + (S.coolant ? T.coolantShift * (has("coolant") ? 2 : 1) : 0); }
@@ -68,6 +72,8 @@ function tick(dt) {
   // Travel animation
   if (S.travel) { S.travel.t += dt / 1.6; if (S.travel.t >= 1) arrive(); }
   if (S.combat) combatTick(dt);
+  incidentsTick(dt); crewTick(dt); tapeTick(dt);
+  if (S.heat > 92 && !burning("reactor") && Math.random() < dt * .25) startIncident(S.layout.indexOf("reactor"), "fire");
   if (S.explore && S.eff.drone < 1 && !S.explore.stalled) { S.explore.stalled = true; log("DRONE LINK LOST: NO POWER TO DRONE BAY.", "alert"); sfx("err"); }
   if (S.explore && S.eff.drone >= 1 && S.explore.stalled) { S.explore.stalled = false; log("DRONE LINK RESTORED.", "grn"); }
   ui();
@@ -95,12 +101,12 @@ function arrive() {
   const id = S.travel.to; S.travel = null; S.at = id; S.target = null; S.visited.add(id);
   const n = node(id); sfx("relay");
   log(`ARRIVED: ${n.name}.`, "grn"); log(D.ARRIVE[n.type]);
-  if (n.type === "beacon" && !S.done.has(id)) { S.done.add(id); log(D.BEACON, "grn"); }
+  if (n.type === "beacon" && !S.done.has(id)) { S.done.add(id); log("BEACON 7 BUFFER DUMPED TO CASSETTE.", "grn"); addTape("hale"); }
   if (n.type === "rocks" && !S.done.has(id)) {
     S.done.add(id); const layers = S.eff.shd;
     const dmg = Math.max(0, 4 - layers * 2); S.hull -= dmg; S.scrap += 3; S.fuel += 1;
     log(dmg ? `ICE STRIKES: HULL -${dmg}. MINED 3 SCRAP, 1 FUEL.` : "SHIELDS DEFLECT THE ICE. MINED 3 SCRAP, 1 FUEL.", dmg ? "alert" : "grn");
-    if (dmg) shake(); if (S.hull <= 0) return lose("hull");
+    if (dmg) { shake(); if (Math.random() < .6) randomIncident("breach"); } if (S.hull <= 0) return lose("hull");
   }
   if (n.type === "hostile" && !S.done.has(id)) startCombat(n);
   if (n.type === "gate") return win();
@@ -155,6 +161,7 @@ function droneMove(dx, dy) {
   if (c === "F") { E.carry.fuel += 2; E.grid[ny][nx] = "."; log("FUEL CELL: +2 FUEL IN DRONE HOLD.", "grn"); sfx("pick"); }
   if (c === "O") { E.carry.o2 += 30; E.grid[ny][nx] = "."; log("OXYGEN CANISTER: +30 O₂ IN DRONE HOLD.", "grn"); sfx("pick"); }
   if (c === "L") { E.grid[ny][nx] = "."; log(E.M.logs[E.logI++] || "LOG CORRUPTED."); sfx("blip"); }
+  if (c === "K") { E.grid[ny][nx] = "."; E.carry.tape = E.M.tape; log("CASSETTE TAPE FOUND. IT'LL PLAY WHEN THE DRONE DOCKS.", "grn"); sfx("pick"); }
   if (c === "C") { E.grid[ny][nx] = "."; S.core = true; log(E.M.core, "grn"); sfx("pick"); }
   if (c === "X") { E.bat -= 12; log("FIRE! DRONE SCORCHED. BATTERY -12.", "alert"); sfx("hit"); }
   // Active sentries shoot anything that passes next to them
@@ -173,6 +180,7 @@ function droneRecall() {
   if (E.grid[E.pos.y][E.pos.x] !== "A") { log("DRONE MUST RETURN TO THE AIRLOCK (A) TO DOCK.", "alert"); sfx("err"); return; }
   S.scrap += E.carry.scrap; S.fuel += E.carry.fuel; S.o2 = Math.min(100, S.o2 + E.carry.o2);
   log(`DRONE DOCKED. UNLOADED ${E.carry.scrap} SCRAP, ${E.carry.fuel} FUEL, ${E.carry.o2} O₂.`, "grn"); sfx("dock");
+  if (E.carry.tape) addTape(E.carry.tape);
   S.done.add(S.at); S.explore = null; setMode("nav");
 }
 function droneLost() { log("DRONE BATTERY DEAD. SIGNAL LOST. EVERYTHING IT CARRIED IS GONE.", "alert"); sfx("alarm"); S.done.add(S.at); S.explore = null; setMode("nav"); }
@@ -200,7 +208,7 @@ function combatTick(dt) {
   C.shots.filter(s => s.t >= 1).forEach(s => {
     if (s.from === "them") {
       if (C.layers > 0) { C.layers--; C.layerT = 0; log("SHIELD LAYER ABSORBED THE HIT.", "grn"); sfx("shield"); }
-      else { S.hull -= E.dmg; log(`HULL HIT! -${E.dmg}.`, "alert"); sfx("hit"); shake(); }
+      else { S.hull -= E.dmg; log(`HULL HIT! -${E.dmg}.`, "alert"); sfx("hit"); shake(); if (Math.random() < D.INCIDENTS.hitChance) randomIncident(); }
     } else {
       if (C.sh > 0) { C.sh--; C.shT = 0; log("ENEMY SHIELD DOWN."); sfx("shield"); }
       else { C.hull -= 2; log(`DIRECT HIT. ENEMY HULL ${Math.max(0, C.hull)}.`, "grn"); sfx("boom"); }
@@ -223,14 +231,18 @@ function win() {
   endScreen("SECTOR 1 CLEARED", `JUMP GATE ENGAGED ON DAY ${Math.max(1, Math.round(S.time / 20))}. HULL ${S.hull}/${S.maxHull}. ${S.core ? "THE TESSERA DATA CORE IS ABOARD: THE AURORA WENT INTO THE VEIL ON PURPOSE." : "SOMEWHERE BACK THERE, A DATA CORE WENT UNREAD."}\n\nSECTORS 2 TO 5 AND HALCYON: NEXT BUILD.`, "");
 }
 function endScreen(title, text, cls) {
-  const ov = $("#ovEnd");
-  ov.innerHTML = `<div class="crt ${cls}"><h1>${esc(title)}</h1><p style="white-space:pre-wrap">${esc(text)}</p><button class="big grn go" id="again" type="button">Reboot</button><div class="fx"></div></div>`;
-  ov.hidden = false; $("#again").addEventListener("click", () => { ov.hidden = true; newGame(); termLines = []; bootLog(); renderFaders(); renderShip(); setMode("nav"); });
+  const ov = $("#ovEnd"), lines = [`*** MERIDIAN SHIP CONTROL · MISSION PRINTOUT ***`, ``, title, `-`.repeat(title.length), ``, ...text.split("\n"), ``,
+    `HULL ........ ${Math.max(0, S.hull)}/${S.maxHull}`, `FUEL ........ ${S.fuel}`, `SCRAP ....... ${S.scrap}`, `TAPES FOUND . ${S.tapes.length}/${Object.keys(D.TAPES).length}`, `ROOMS BUILT . ${S.layout.filter(Boolean).length}/9`, ``, `END OF PRINTOUT. TEAR ALONG PERFORATION.`];
+  ov.innerHTML = `<div class="paper"><div class="feed" id="feed"></div><button class="big grn go" id="again" type="button" hidden>Reboot</button></div>`;
+  ov.hidden = false; say(title + ". " + text.split("\n")[0], true);
+  const feed = $("#feed"); let i = 0;
+  (function print() { if (i >= lines.length) { $("#again").hidden = false; return; } const p = document.createElement("p"); p.textContent = lines[i++] || " "; feed.appendChild(p); sfx("print"); setTimeout(print, reduce ? 0 : 140); })();
+  $("#again").addEventListener("click", () => { ov.hidden = true; stopTape(); newGame(); termLines = []; bootLog(); renderFaders(); renderShip(); setMode("nav"); });
 }
 
 /* ── Terminal ── */
 let termLines = [];
-function log(t, cls = "") { termLines.push({ t, cls }); if (termLines.length > 6) termLines.shift(); renderTerm(); }
+function log(t, cls = "") { termLines.push({ t, cls }); if (termLines.length > 6) termLines.shift(); renderTerm(); if (cls === "alert") say(t, false); }
 function renderTerm() {
   $("#term").innerHTML = termLines.map((l, i) => `<p class="${l.cls}${i < termLines.length - 3 ? " old" : ""}">&gt; ${esc(l.t)}${i === termLines.length - 1 ? ' <span class="cursor"></span>' : ""}</p>`).join("");
 }
@@ -241,8 +253,8 @@ function setMode(m) {
   S.mode = m; buildSlot = null;
   document.querySelectorAll(".sel-btn").forEach(b => b.classList.toggle("on", b.dataset.mode === m));
   const amber = m === "drone"; $("#crt").classList.toggle("amber", amber);
-  $("#crtLabel").textContent = { nav: "NAV SCOPE", ship: "SHIP LAYOUT", drone: "DRONE CAM", radar: "RADAR" }[m];
-  $("#shipgrid").hidden = m !== "ship"; if (m === "ship") renderShip();
+  $("#crtLabel").textContent = { nav: "NAV SCOPE", ship: "SHIP · CUTAWAY", drone: "DRONE CAM", radar: "RADAR" }[m];
+  renderShip();
   renderActions(); sfx("tick");
 }
 document.querySelectorAll(".sel-btn").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
@@ -267,7 +279,9 @@ function renderActions() {
       <button class="big red" id="bFire" type="button">Fire</button><button class="big yel" id="bFlee" type="button">Jump out</button>`;
     $("#bFire").addEventListener("click", fire); $("#bFlee").addEventListener("click", () => { if (!S.target) { log("PLOT AN ESCAPE ON THE NAV SCOPE, THEN CHARGE ENGINES.", "alert"); setMode("nav"); } else engage(); });
   } else {
-    a.innerHTML = `<div class="info">TAP AN EMPTY BAY TO BUILD. TAP A ROOM TO INSPECT OR STRIP IT FOR SCRAP. FADERS APPEAR FOR POWERED ROOMS.</div>`;
+    const fires = Object.keys(S.incidents).map(Number);
+    if (fires.length) return showIncident(S.sel != null && S.incidents[S.sel] ? S.sel : fires[0]);
+    a.innerHTML = `<div class="info">TAP AN EMPTY BAY TO BUILD. TAP A ROOM TO INSPECT OR STRIP IT. WHEN SOMETHING BURNS, TAP IT: SEND CREW OR VENT.</div>`;
   }
 }
 
@@ -296,8 +310,10 @@ function ui() {
     $("#lay").innerHTML = Array.from({ length: Math.max(1, S.eff.shd) }, (_, i) => `<i class="${i < C.layers ? "on" : ""}"></i>`).join("");
     const fl = $("#bFlee"); fl.classList.toggle("ready", !!S.target && S.charge >= 100);
   }
-  if (S.mode === "ship" && buildSlot === null && (uiFrame++ % 20 === 0)) renderShip();
   document.querySelector('.sel-btn[data-mode="radar"]').classList.toggle("alert", !!S.combat && S.mode !== "radar");
+  document.querySelector('.sel-btn[data-mode="ship"]').classList.toggle("alert", Object.keys(S.incidents).length > 0 && S.mode !== "ship");
+  lamp("#lFire", Object.keys(S.incidents).length > 0, true);
+  tapeUI();
   document.querySelector('.sel-btn[data-mode="drone"]').classList.toggle("alert", !!S.explore && S.mode !== "drone");
   $("#crtInfo").textContent = S.mode === "nav" ? D.SECTOR.name.split(" · ")[0] : S.mode === "drone" && S.explore ? `BAT ${Math.max(0, Math.round(S.explore.bat))}` : "";
 }
@@ -360,32 +376,114 @@ $("#cool").addEventListener("click", e => { S.coolant = !S.coolant; e.currentTar
 $("#scramCover").addEventListener("click", () => { $("#scram").classList.add("open"); sfx("click"); setTimeout(() => $("#scram").classList.remove("open"), 4000); });
 $("#scramBtn").addEventListener("click", () => { if (!$("#scram").classList.contains("open")) return; S.scram = 3; S.reactor = Math.min(S.reactor, 3); log("MANUAL SCRAM. CORE VENTING. ALL SYSTEMS DOWN FOR 3 SECONDS.", "alert"); sfx("alarm"); $("#scram").classList.remove("open"); });
 
-/* ── Ship grid ── */
+/* ── Ship cutaway: build menu overlay + room actions ── */
 function renderShip() {
   const g = $("#shipgrid");
-  if (buildSlot !== null) {
-    g.innerHTML = `<div class="buildmenu"><p>BAY ${buildSlot + 1}: BUILD WHAT? SCRAP ${S.scrap}</p>${D.BUILDABLE.map(r => { const R = D.ROOMS[r], ok = S.scrap >= R.cost && !has(r); return `<button type="button" data-b="${r}" ${ok ? "" : "disabled"}><span>${R.name}</span><span>${has(r) ? "BUILT" : R.cost + " SCR"}</span></button>`; }).join("")}<button type="button" data-b="x"><span>CANCEL</span><span></span></button></div>`;
-    g.querySelectorAll("[data-b]").forEach(b => b.addEventListener("click", () => { if (b.dataset.b === "x") { buildSlot = null; renderShip(); } else build(buildSlot, b.dataset.b); }));
-    g.querySelectorAll("[data-b]").forEach(b => b.addEventListener("mouseenter", () => { const R = D.ROOMS[b.dataset.b]; if (R) $("#crtInfo").textContent = ""; }));
-    return;
-  }
-  g.innerHTML = S.layout.map((r, i) => {
-    if (!r) return `<button class="cell empty" type="button" data-i="${i}"><b>+</b><span>EMPTY BAY</span></button>`;
-    const R = D.ROOMS[r], off = R.sys && S.eff[R.sys] < 1;
-    return `<button class="cell ${S.sel === i ? "sel" : ""} ${off ? "off" : ""}" type="button" data-i="${i}"><b>${R.short}</b><span>${R.name}</span><span>${R.sys ? (off ? "UNPOWERED" : "PWR " + S.eff[R.sys]) : "ONLINE"}</span></button>`;
-  }).join("");
-  g.querySelectorAll("[data-i]").forEach(b => b.addEventListener("click", () => {
-    const i = +b.dataset.i; shipClick(i);
-    const r = S.layout[i]; if (!r || S.combat || S.explore) return;
-    const R = D.ROOMS[r]; log(`${R.name}: ${R.desc}`);
-    if (!R.fixed) showDemolish(i);
-  }));
+  g.hidden = !(S.mode === "ship" && buildSlot !== null);
+  if (g.hidden) { g.innerHTML = ""; return; }
+  g.innerHTML = `<div class="buildmenu"><p>BAY ${buildSlot + 1}: BUILD WHAT? SCRAP ${S.scrap}</p>${D.BUILDABLE.map(r => { const R = D.ROOMS[r], ok = S.scrap >= R.cost && !has(r); return `<button type="button" data-b="${r}" ${ok ? "" : "disabled"}><span>${R.name}</span><span>${has(r) ? "BUILT" : R.cost + " SCR"}</span></button>`; }).join("")}<button type="button" data-b="x"><span>CANCEL</span><span></span></button></div>`;
+  g.querySelectorAll("[data-b]").forEach(b => b.addEventListener("click", () => { if (b.dataset.b === "x") { buildSlot = null; renderShip(); } else build(buildSlot, b.dataset.b); }));
+}
+function roomTapped(i) {
+  const inc = S.incidents[i];
+  if (inc) { S.sel = i; showIncident(i); sfx("tick"); return; }
+  if (S.combat || S.explore) { S.sel = i; if (S.layout[i]) log(`${D.ROOMS[S.layout[i]].name}: ${S.layout[i] && D.ROOMS[S.layout[i]].desc}`); sfx("tick"); return; }
+  shipClick(i);
+  const r = S.layout[i]; if (!r) return;
+  const R = D.ROOMS[r]; log(`${R.name}: ${R.desc}`);
+  if (!R.fixed) showDemolish(i); else renderActions();
 }
 function showDemolish(i) {
   const a = $("#actions"), R = D.ROOMS[S.layout[i]];
-  a.innerHTML = `<div class="info">${esc(R.name)} · ${esc(R.desc)}</div><button class="big red" id="bDemo" type="button">Strip +${Math.floor(R.cost / 2)}</button><button class="big" style="background:linear-gradient(#5a564d,#35322c)" id="bBack" type="button">Back</button>`;
-  $("#bDemo").addEventListener("click", () => { demolish(i); renderActions(); }); $("#bBack").addEventListener("click", () => { S.sel = null; renderShip(); renderActions(); });
+  a.innerHTML = `<div class="info">${esc(R.name)} · ${esc(R.desc)}</div><button class="big red" id="bDemo" type="button">Strip +${Math.floor(R.cost / 2)}</button><button class="big grey" id="bBack" type="button">Back</button>`;
+  $("#bDemo").addEventListener("click", () => { demolish(i); S.sel = null; renderActions(); }); $("#bBack").addEventListener("click", () => { S.sel = null; renderActions(); });
 }
+function showIncident(i) {
+  const inc = S.incidents[i], a = $("#actions"); if (!inc) return renderActions();
+  const room = S.layout[i] ? D.ROOMS[S.layout[i]].name : "BAY " + (i + 1);
+  const busy = S.crew.find(c => c.task && c.task.room === i);
+  a.innerHTML = `<div class="info">${D.INCIDENTS[inc.type].name} IN ${esc(room)}. ${busy ? busy.name + " IS ON IT." : "NOBODY ASSIGNED."} ${inc.type === "fire" ? "IT WILL SPREAD." : "AIR IS VENTING."}</div>
+    <button class="big yel" id="bSend" type="button" ${busy ? "disabled" : ""}>Send crew</button><button class="big red" id="bVent" type="button">Vent room</button>`;
+  $("#bSend").addEventListener("click", () => dispatch(i));
+  $("#bVent").addEventListener("click", () => vent(i));
+}
+
+/* ── Incidents & crew ── */
+function startIncident(i, type) {
+  if (i < 0 || S.incidents[i]) return;
+  S.incidents[i] = { type, t: 0, hullT: 0 };
+  const room = S.layout[i] ? D.ROOMS[S.layout[i]].name : "EMPTY BAY " + (i + 1);
+  log(`${type === "fire" ? "FIRE" : "HULL BREACH"} IN ${room}!`, "alert"); sfx("alarm");
+  if (S.mode === "ship") showIncident(i);
+}
+function randomIncident(type) {
+  const rooms = S.layout.map((r, i) => i).filter(i => S.layout[i] && S.layout[i] !== "bridge" && !S.incidents[i]);
+  if (!rooms.length) return;
+  startIncident(rooms[(Math.random() * rooms.length) | 0], type || (Math.random() < .6 ? "fire" : "breach"));
+}
+function incidentsTick(dt) {
+  Object.entries(S.incidents).forEach(([k, inc]) => {
+    const i = +k, I = D.INCIDENTS[inc.type]; inc.t += dt;
+    if (inc.type === "fire") {
+      inc.hullT += dt; if (inc.hullT >= I.hullEvery) { inc.hullT = 0; S.hull -= 1; log("FIRE DAMAGE: HULL -1.", "alert"); if (S.hull <= 0) lose("hull"); }
+      if (inc.t >= I.spread) { inc.t = 0; const n = [i - 3, i + 3, i % 3 ? i - 1 : -1, i % 3 < 2 ? i + 1 : -1].filter(j => j >= 0 && j < 9 && !S.incidents[j]); if (n.length) startIncident(n[(Math.random() * n.length) | 0], "fire"); }
+    } else S.o2 = Math.max(0, S.o2 - I.o2 * dt);
+  });
+}
+function dispatch(i) {
+  if (!S.incidents[i]) return;
+  const free = S.crew.filter(c => !c.task && !c.hurt);
+  if (!free.length) { log("EVERYONE'S BUSY.", "alert"); sfx("err"); return; }
+  const cx = cellCenter(i);
+  const c = free.sort((a, b) => Math.abs(a.x - cx[0]) + Math.abs(a.y - cx[1]) - Math.abs(b.x - cx[0]) - Math.abs(b.y - cx[1]))[0];
+  c.task = { room: i, work: 0 }; c.path = pathTo(c, i); sfx("blip"); log(`${c.name}: ON MY WAY.`);
+  if (S.mode === "ship") showIncident(i);
+}
+function vent(i) {
+  if (!S.incidents[i]) return;
+  S.o2 = Math.max(0, S.o2 - D.INCIDENTS.ventO2); delete S.incidents[i]; sfx("vent"); shake();
+  S.crew.forEach(c => { if (c.room === i && !c.moving) { c.hurt = 8; log(`${c.name} CAUGHT IN THE VENT! MED BAY, NOW.`, "alert"); } if (c.task && c.task.room === i) c.task = null; });
+  log(`ROOM VENTED TO SPACE. -${D.INCIDENTS.ventO2} O₂.`, "alert"); renderActions();
+}
+/* Crew walk along the decks; the middle column has the ladder between decks. */
+let CELL = null; // [x, y, w, h] of each bay in canvas pixels, set by drawShipCut
+function cellCenter(i) { if (!CELL || !CELL[i]) return [0, 0]; const c = CELL[i]; return [c[0] + c[2] / 2, c[1] + c[3] - 10 * DPR]; }
+function pathTo(c, i) {
+  if (!CELL) return [];
+  const from = c.room >= 0 ? c.room : 4, [tx, ty] = cellCenter(i), rowFrom = Math.floor(from / 3), rowTo = Math.floor(i / 3);
+  if (rowFrom === rowTo) return [[tx, ty]];
+  const lad = cellCenter(rowFrom * 3 + 1), ladTo = cellCenter(rowTo * 3 + 1);
+  return [[lad[0], lad[1]], [ladTo[0], ladTo[1]], [tx, ty]];
+}
+function crewTick(dt) {
+  if (!CELL) return;
+  S.crew.forEach(c => {
+    if (!c.placed) { const [x, y] = cellCenter(c.room); c.x = x + (Math.random() - .5) * 30 * DPR; c.y = y; c.placed = true; }
+    if (c.hurt) { c.hurt -= dt; if (c.hurt <= 0) { c.hurt = 0; log(`${c.name}: I'M OK. BACK ON DUTY.`); } }
+    if (c.path.length) {
+      c.moving = true; const [tx, ty] = c.path[0], sp = 70 * DPR * dt * (c.hurt ? .4 : 1), dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy);
+      if (d <= sp) { c.x = tx; c.y = ty; c.path.shift(); if (!c.path.length) { c.moving = false; const r = roomAt(c.x, c.y - 4 * DPR); if (r >= 0) c.room = r; } }
+      else { c.x += dx / d * sp; c.y += dy / d * sp; c.face = dx < 0 ? -1 : 1; }
+      return;
+    }
+    c.moving = false;
+    if (c.task) {
+      const inc = S.incidents[c.task.room];
+      if (!inc) { c.task = null; return; }
+      c.task.work += dt; if (Math.random() < .3) sparks.push({ x: c.x + (Math.random() - .5) * 12 * DPR, y: c.y - 10 * DPR, vx: (Math.random() - .5) * 60, vy: -Math.random() * 60, life: .4, col: D.INCIDENTS[inc.type].color });
+      if (c.task.work >= D.INCIDENTS[inc.type].fix) {
+        if (inc.type === "breach" && S.scrap > 0) S.scrap -= 1;
+        delete S.incidents[c.task.room]; c.task = null; log(c.fix[(Math.random() * c.fix.length) | 0], "grn"); sfx("dock");
+        if (S.mode === "ship") renderActions();
+      }
+      return;
+    }
+    c.idle -= dt;
+    if (c.idle <= 0) { c.idle = 4 + Math.random() * 6; const home = roomOf(c.home); const built = S.layout.map((r, i) => r ? i : -1).filter(i => i >= 0); const dest = Math.random() < .6 ? home : built[(Math.random() * built.length) | 0]; if (dest !== c.room) c.path = pathTo(c, dest); else { const [x] = cellCenter(dest); c.path = [[x + (Math.random() - .5) * 40 * DPR, c.y]]; } }
+  });
+}
+function roomAt(x, y) { if (!CELL) return -1; return CELL.findIndex(([cx, cy, w, h]) => x >= cx && x <= cx + w && y >= cy && y <= cy + h); }
+let sparks = [];
 
 /* ── Main monitor drawing ── */
 const cv = $("#scope"), g = cv.getContext("2d");
@@ -399,7 +497,7 @@ function draw(t) {
   if (shakeT > 0 && !reduce) { shakeT -= 1 / 60; g.translate((Math.random() - .5) * 10 * DPR, (Math.random() - .5) * 8 * DPR); }
   const m = S.mode;
   if (S.scram > 0 && Math.random() < .3) { g.fillStyle = "rgba(109,255,138,.05)"; g.fillRect(0, 0, W, H); }
-  if (m === "nav") drawNav(t); else if (m === "radar") drawRadar(t); else if (m === "drone") drawDrone(t); else drawShipBg(t);
+  if (m === "nav") drawNav(t); else if (m === "radar") drawRadar(t); else if (m === "drone") drawDrone(t); else drawShipCut(t);
 }
 const glowLine = (col, w = 1.6) => { g.strokeStyle = col; g.lineWidth = w * DPR; g.shadowColor = col; g.shadowBlur = 8 * DPR; };
 const txt = (s, x, y, col, size = 18, al = "center") => { g.shadowBlur = 6 * DPR; g.shadowColor = col; g.fillStyle = col; g.font = `${size * DPR}px VT323, monospace`; g.textAlign = al; g.fillText(s, x, y); };
@@ -460,7 +558,7 @@ function drawDrone(t) {
     const px = ox + x * cs, py = oy + y * cs;
     if (c === "#") { g.shadowBlur = 0; g.fillStyle = "rgba(255,179,71,.22)"; g.fillRect(px + 1, py + 1, cs - 2, cs - 2); g.strokeStyle = AMB_D; g.lineWidth = 1; g.strokeRect(px + 1.5, py + 1.5, cs - 3, cs - 3); return; }
     g.shadowBlur = 0; g.fillStyle = "rgba(255,179,71,.05)"; g.fillRect(px + 1, py + 1, cs - 2, cs - 2);
-    const glyph = { S: "$", F: "F", O: "O", L: "≡", C: "◆", A: "A", X: "✶", T: E.jammed.has(x + "," + y) ? "t" : "T" }[c];
+    const glyph = { S: "$", F: "F", O: "O", L: "≡", C: "◆", A: "A", X: "✶", K: "▣", T: E.jammed.has(x + "," + y) ? "t" : "T" }[c];
     if (glyph) { const col = c === "X" ? (Math.sin(t * 12 + x) > 0 ? RED : AMB) : c === "T" && !E.jammed.has(x + "," + y) ? RED : AMB; txt(glyph, px + cs / 2, py + cs * .72, col, cs / DPR * .8); }
   }));
   const px = ox + E.pos.x * cs + cs / 2, py = oy + E.pos.y * cs + cs / 2;
@@ -469,9 +567,63 @@ function drawDrone(t) {
   if ((t * 3 | 0) % 2) { g.strokeRect(px - cs * .38, py - cs * .38, cs * .76, cs * .76); }
   txt(E.M.title, 12 * DPR, H - 10 * DPR, AMB, 17, "left");
 }
-function drawShipBg(t) {
-  glowLine("rgba(109,255,138,.18)", 1); const m = 10 * DPR;
-  g.beginPath(); g.moveTo(W / 2, m + 26 * DPR); g.lineTo(W - m, H * .3); g.lineTo(W - m, H - m); g.lineTo(m, H - m); g.lineTo(m, H * .3); g.closePath(); g.stroke();
+function drawShipCut(t) {
+  // Hull: a long ship, nose to the right, three decks of three bays
+  const L = W * .07, R = W * .86, Tp = H * .16, B = H * .9, cw = (R - L) / 3, ch = (B - Tp) / 3;
+  glowLine("rgba(109,255,138,.55)", 1.6);
+  g.beginPath(); g.moveTo(L - 14 * DPR, Tp - 10 * DPR); g.lineTo(R + 10 * DPR, Tp - 10 * DPR); g.lineTo(W - 10 * DPR, (Tp + B) / 2); g.lineTo(R + 10 * DPR, B + 10 * DPR); g.lineTo(L - 14 * DPR, B + 10 * DPR); g.closePath(); g.stroke();
+  // engine exhaust at the stern
+  for (let i = 0; i < 3; i++) { const y = Tp + ch * (i + .5), f = 8 + Math.sin(t * 20 + i) * 3 + S.eff.eng * 3; glowLine(AMB, 1.5); g.beginPath(); g.moveTo(L - 14 * DPR, y - 6 * DPR); g.lineTo(L - (14 + f) * DPR, y); g.lineTo(L - 14 * DPR, y + 6 * DPR); g.stroke(); }
+  CELL = [];
+  for (let i = 0; i < 9; i++) {
+    const col = i % 3, row = (i / 3) | 0, x = L + col * cw, y = Tp + row * ch; CELL.push([x, y, cw, ch]);
+    const room = S.layout[i], R2 = room && D.ROOMS[room], inc = S.incidents[i];
+    const on = !room ? false : R2.sys ? S.eff[R2.sys] > 0 : S.scram <= 0;
+    g.shadowBlur = 0; g.fillStyle = on ? "rgba(109,255,138,.07)" : "rgba(0,0,0,.25)"; g.fillRect(x + 3 * DPR, y + 3 * DPR, cw - 6 * DPR, ch - 6 * DPR);
+    glowLine(S.sel === i ? GRN : room ? "rgba(109,255,138,.6)" : GRN_D, S.sel === i ? 2.4 : 1.2);
+    if (!room) g.setLineDash([4 * DPR, 5 * DPR]);
+    g.strokeRect(x + 3 * DPR, y + 3 * DPR, cw - 6 * DPR, ch - 6 * DPR); g.setLineDash([]);
+    // deck floor
+    glowLine("rgba(109,255,138,.35)", 1); g.beginPath(); g.moveTo(x + 3 * DPR, y + ch - 7 * DPR); g.lineTo(x + cw - 3 * DPR, y + ch - 7 * DPR); g.stroke();
+    if (col === 1 && row < 2) { glowLine("rgba(109,255,138,.25)", 1); for (let k = 0; k < 6; k++) { const ly = y + ch - 7 * DPR + k * ch / 6; g.beginPath(); g.moveTo(x + cw / 2 - 6 * DPR, ly); g.lineTo(x + cw / 2 + 6 * DPR, ly); g.stroke(); } }
+    if (!room) { txt("+ EMPTY", x + cw / 2, y + ch / 2, GRN_D, 17); continue; }
+    roomIcon(room, x + cw / 2, y + ch * .42, Math.min(cw, ch) * .22, t, on);
+    g.font = `${15 * DPR}px VT323, monospace`; txt(g.measureText(R2.name).width > cw - 10 * DPR ? R2.short : R2.name, x + cw / 2, y + 18 * DPR, on ? GRN : GRN_D, 15);
+    if (R2.sys) { const p = S.eff[R2.sys]; for (let k = 0; k < 4; k++) { g.shadowBlur = 0; g.fillStyle = k < p ? GRN : "rgba(109,255,138,.12)"; g.fillRect(x + cw - 14 * DPR, y + ch - 14 * DPR - k * 7 * DPR, 6 * DPR, 5 * DPR); } }
+    if (inc) {
+      if (inc.type === "fire") for (let k = 0; k < 14; k++) { const fx = x + 10 * DPR + ((k * 37 + t * 60) % (cw - 20 * DPR)), fh = (10 + Math.sin(t * 13 + k) * 7) * DPR; g.fillStyle = k % 3 ? RED : AMB; g.shadowColor = RED; g.shadowBlur = 10 * DPR; g.fillRect(fx, y + ch - 8 * DPR - fh, 3 * DPR, fh); }
+      else { glowLine("#9fd8ff", 1.5); for (let k = 0; k < 5; k++) { const a = t * 3 + k * 1.3, rr = ((t * 40 + k * 17) % 30) * DPR; g.beginPath(); g.moveTo(x + cw / 2, y + ch / 2); g.lineTo(x + cw / 2 + Math.cos(a) * rr, y + ch / 2 + Math.sin(a) * rr); g.stroke(); } }
+      if ((t * 3 | 0) % 2) { glowLine(RED, 2.5); g.strokeRect(x + 1, y + 1, cw - 2, ch - 2); }
+      txt(D.INCIDENTS[inc.type].name, x + cw / 2, y + ch - 14 * DPR, RED, 17);
+    }
+  }
+  // crew: little amber people with name tags
+  S.crew.forEach(c => {
+    if (!c.placed) return;
+    const bob = c.moving ? Math.abs(Math.sin(t * 12)) * 2 * DPR : 0, x = c.x, y = c.y - bob;
+    g.shadowColor = AMB; g.shadowBlur = 6 * DPR; g.fillStyle = c.hurt ? RED : AMB;
+    g.fillRect(x - 2.5 * DPR, y - 17 * DPR, 5 * DPR, 5 * DPR);      // head
+    g.fillRect(x - 3.5 * DPR, y - 11 * DPR, 7 * DPR, 8 * DPR);      // body
+    const leg = c.moving ? Math.sin(t * 14) * 2 * DPR : 0;
+    g.fillRect(x - 3 * DPR + leg, y - 3 * DPR, 2 * DPR, 4 * DPR); g.fillRect(x + 1 * DPR - leg, y - 3 * DPR, 2 * DPR, 4 * DPR);
+    txt(c.tag, x, y - 21 * DPR, c.task ? GRN : AMB, 13);
+  });
+  sparks.forEach(p => { p.x += p.vx * DPR / 60; p.y += p.vy * DPR / 60; p.vy += 4; p.life -= 1 / 60; g.fillStyle = p.col; g.fillRect(p.x, p.y, 2 * DPR, 2 * DPR); }); sparks = sparks.filter(p => p.life > 0);
+  txt(`TAP A BAY · CREW ${S.crew.filter(c => !c.task).length}/4 FREE · O₂ ${Math.round(S.o2)}`, 12 * DPR, H - 6 * DPR, GRN, 15, "left");
+}
+function roomIcon(room, x, y, s, t, on) {
+  glowLine(on ? GRN : GRN_D, 1.6); g.beginPath();
+  if (room === "reactor") { const p = 1 + (on ? Math.sin(t * 4) * .12 : 0); g.arc(x, y, s * .6 * p, 0, TAU); g.moveTo(x + s, y); g.arc(x, y, s, 0, TAU); g.stroke(); return; }
+  if (room === "engine") { g.moveTo(x - s, y - s * .6); g.lineTo(x + s * .4, y - s * .6); g.lineTo(x + s, y); g.lineTo(x + s * .4, y + s * .6); g.lineTo(x - s, y + s * .6); g.closePath(); g.stroke(); return; }
+  if (room === "life") { g.moveTo(x - s * .7, y); g.lineTo(x + s * .7, y); g.moveTo(x, y - s * .7); g.lineTo(x, y + s * .7); g.stroke(); g.beginPath(); g.arc(x, y, s, 0, TAU); g.stroke(); return; }
+  if (room === "bridge") { g.rect(x - s, y - s * .5, s * 2, s); g.moveTo(x - s * .6, y - s * .1); g.lineTo(x + s * .6, y - s * .1); g.stroke(); return; }
+  if (room === "sensor") { const a = on ? t * 2 : 0; g.arc(x, y + s * .4, s, Math.PI * 1.1, Math.PI * 1.9); g.moveTo(x, y + s * .4); g.lineTo(x + Math.cos(a) * s, y + s * .4 - Math.abs(Math.sin(a)) * s); g.stroke(); return; }
+  if (room === "drone") { g.rect(x - s * .5, y - s * .5, s, s); g.moveTo(x - s, y - s); g.lineTo(x - s * .5, y - s * .5); g.moveTo(x + s, y - s); g.lineTo(x + s * .5, y - s * .5); g.moveTo(x - s, y + s); g.lineTo(x - s * .5, y + s * .5); g.moveTo(x + s, y + s); g.lineTo(x + s * .5, y + s * .5); g.stroke(); return; }
+  if (room === "shield") { for (let k = 1; k <= 3; k++) { g.moveTo(x + s * k / 3, y); g.arc(x, y, s * k / 3, 0, TAU); } g.stroke(); return; }
+  if (room === "weapon") { g.moveTo(x - s, y + s * .3); g.lineTo(x + s, y + s * .3); g.moveTo(x - s * .4, y + s * .3); g.lineTo(x - s * .4, y - s * .4); g.lineTo(x + s * .9, y - s * .4); g.stroke(); return; }
+  if (room === "battery") { g.rect(x - s * .8, y - s * .5, s * 1.6, s); g.moveTo(x + s * .8, y - s * .2); g.lineTo(x + s, y - s * .2); g.lineTo(x + s, y + s * .2); g.lineTo(x + s * .8, y + s * .2); g.stroke(); return; }
+  if (room === "coolant") { for (let k = -1; k <= 1; k++) { g.moveTo(x - s, y + k * s * .5); for (let j = 0; j <= 8; j++) g.lineTo(x - s + j * s / 4, y + k * s * .5 + Math.sin(j + t * 3) * s * .12); } g.stroke(); return; }
+  if (room === "cargo") { g.rect(x - s, y - s * .6, s * .9, s * 1.2); g.rect(x + s * .1, y - s * .2, s * .9, s * .8); g.stroke(); return; }
 }
 
 /* ── Sound: all synthesized, 80s-console style ── */
@@ -491,18 +643,55 @@ function sfx(k) {
      jump: () => f("sawtooth", 80, 1200, 1.2, .1), launch: () => f("triangle", 300, 900, .3, .1), step: () => f("square", 600, 0, .03, .03), pick: () => f("triangle", 900, 1800, .15, .1),
      scan: () => f("sine", 400, 2000, .4, .08), hit: () => f("sawtooth", 180, 40, .35, .2), dock: () => f("triangle", 900, 300, .4, .1), shield: () => f("sine", 1500, 400, .25, .1),
      boom: () => f("sawtooth", 120, 30, .5, .25), fire: () => f("square", 1100, 200, .25, .12), enemyfire: () => f("square", 500, 900, .2, .06), win: () => f("triangle", 523, 1046, .6, .12),
-     build: () => f("square", 300, 600, .25, .08), demolish: () => f("sawtooth", 400, 80, .35, .1) }[k] || (() => {}))();
+     build: () => f("square", 300, 600, .25, .08), demolish: () => f("sawtooth", 400, 80, .35, .1),
+     vent: () => f("sawtooth", 900, 60, .9, .18), print: () => f("square", 2400 + Math.random() * 600, 0, .04, .03), degauss: () => { o.type = "sine"; o.frequency.setValueAtTime(60, t); o.frequency.exponentialRampToValueAtTime(30, t + .9); env(.35, 1); } }[k] || (() => {}))();
 }
+
+/* ── Tape deck ── */
+let tapePlay = null;
+function addTape(id) { if (S.tapes.includes(id)) return; S.tapes.push(id); S.tapeI = S.tapes.length - 1; log(`TAPE LOADED: ${D.TAPES[id].label}. PRESS PLAY.`, "grn"); sfx("clunk"); document.querySelector(".deck").classList.add("new"); }
+function playTape() {
+  if (S.tapeI < 0) { log("TAPE DECK EMPTY. FIND CASSETTES IN WRECKS."); sfx("err"); return; }
+  const T0 = D.TAPES[S.tapes[S.tapeI]]; tapePlay = { lines: T0.lines, i: 0, t: 0 }; sfx("clunk"); document.querySelector(".deck").classList.remove("new");
+  sayLine();
+}
+function sayLine() { const P = tapePlay; if (!P) return; if (P.i >= P.lines.length) { stopTape(); log("END OF TAPE."); return; } log("TAPE: " + P.lines[P.i], "grn"); say(P.lines[P.i], true); P.i++; P.t = 0; }
+function stopTape() { if (tapePlay) { tapePlay = null; try { speechSynthesis.cancel(); } catch (_) {} } }
+function tapeTick(dt) { if (!tapePlay) return; tapePlay.t += dt; const speaking = voiceOn && window.speechSynthesis && speechSynthesis.speaking; if ((!speaking && tapePlay.t > 1.2) || tapePlay.t > 9) sayLine(); }
+function tapeUI() {
+  const lbl = S.tapeI >= 0 ? D.TAPES[S.tapes[S.tapeI]].label : "NO TAPE"; const el = $("#tapeLbl"); if (el.textContent !== lbl) el.textContent = lbl;
+  $("#tapeCount").textContent = String(S.tapes.length).padStart(1, "0") + "/" + Object.keys(D.TAPES).length;
+  document.querySelector(".deck").classList.toggle("playing", !!tapePlay);
+}
+$("#tPlay").addEventListener("click", playTape);
+$("#tStop").addEventListener("click", () => { stopTape(); sfx("clunk"); });
+$("#tNext").addEventListener("click", () => { if (!S.tapes.length) return; stopTape(); S.tapeI = (S.tapeI + 1) % S.tapes.length; sfx("clunk"); });
+
+/* ── The ship's voice (speech synthesis), MOTHER-style ── */
+let voiceOn = true, lastSay = 0;
+function say(text, force) {
+  if (!voiceOn || !window.speechSynthesis) return;
+  const now = performance.now(); if (!force && (now - lastSay < 2500 || speechSynthesis.speaking)) return; lastSay = now;
+  try {
+    const u = new SpeechSynthesisUtterance(text.toLowerCase().replace(/o₂/g, "oxygen").replace(/[·'"]/g, " "));
+    const vs = speechSynthesis.getVoices(); const v = vs.find(v => /en[-_](GB|US)/i.test(v.lang) && /female|samantha|zira|serena|karen|moira|google uk english female/i.test(v.name)) || vs.find(v => /^en/i.test(v.lang));
+    if (v) u.voice = v; u.pitch = .55; u.rate = .88; u.volume = .9;
+    if (force) speechSynthesis.cancel(); speechSynthesis.speak(u);
+  } catch (_) {}
+}
+$("#voice").addEventListener("click", e => { voiceOn = !voiceOn; e.currentTarget.classList.toggle("on", voiceOn); e.currentTarget.setAttribute("aria-pressed", String(voiceOn)); sfx("clunk"); if (!voiceOn) try { speechSynthesis.cancel(); } catch (_) {} else say("voice online", true); });
+$("#degauss").addEventListener("click", () => { const c = $("#crt"); c.classList.remove("degauss"); void c.offsetWidth; c.classList.add("degauss"); sfx("degauss"); });
 
 /* ── Boot ── */
 let booted = false;
 newGame(); renderFaders(); setMode("nav"); ui();
 const bootLines = ["HALCYON TRANSIT AUTHORITY", "MERIDIAN SHIP CONTROL · FIRMWARE 2.1", "MEMORY CHECK .......... 640K OK", "REACTOR INTERLOCK ..... OK", "DRONE BAY ............. NOT INSTALLED", "WEAPON BAY ............ NOT INSTALLED", "", "READY."];
 (function type(i, j) { const el = $("#bootText"); if (i >= bootLines.length) return; el.textContent = bootLines.slice(0, i).join("\n") + (i ? "\n" : "") + bootLines[i].slice(0, j); setTimeout(() => j >= bootLines[i].length ? type(i + 1, 0) : type(i, j + 2), j >= bootLines[i].length ? 120 : 18); })(0, 0);
-$("#powerOn").addEventListener("click", () => { $("#ovBoot").hidden = true; booted = true; startSound(); sfx("relay"); bootLog(); });
+$("#powerOn").addEventListener("click", () => { $("#ovBoot").hidden = true; booted = true; startSound(); sfx("relay"); bootLog(); say("meridian ship control online. good morning, control.", true); const c = $("#crt"); c.classList.add("poweron"); });
 cv.addEventListener("pointerdown", e => {
-  if (S.mode !== "nav" || S.travel) return;
   const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * DPR, y = (e.clientY - r.top) * DPR;
+  if (S.mode === "ship") { const i = roomAt(x, y); if (i >= 0) roomTapped(i); return; }
+  if (S.mode !== "nav" || S.travel) return;
   let best = null, bd = 34 * DPR; D.SECTOR.nodes.forEach(n => { const [nx, ny] = navXY(n), d = Math.hypot(nx - x, ny - y); if (d < bd) { bd = d; best = n; } });
   if (best) selectTarget(best.id);
 });

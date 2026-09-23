@@ -56,7 +56,8 @@ const SECTOR = {
 /* ── Derelicts to explore with the drone ──
    Maps are drawn as text. Legend:
    # wall   . floor   A airlock (drone starts here)   S scrap   F fuel   O oxygen
-   L log (read in order)   X fire (drains drone battery)   T sentry turret (shoots if you pass it; SCAN jams it)   C data core */
+   L log (read in order)   X fire (drains drone battery)   T sentry turret (shoots if you pass it; SCAN jams it)   C data core
+   K cassette tape (plays in the TAPE DECK) */
 const MAPS = {
   hauler: {
     title: "ORE HAULER 'MAGPIE'", note: "Cargo hauler. Lost power 11 years ago. Crew manifest: 6.",
@@ -68,10 +69,11 @@ const MAPS = {
       "#.###.#.#F#",
       "#A....X...#",
       "#.###.#.#.#",
-      "#..S#...#O#",
+      "#K.S#...#O#",
       "###########",
     ],
     logs: ["MAGPIE LOG 214: CAPTAIN SAYS THE SIGNAL IS JUST A PULSAR. PULSARS DON'T COUNT, CAPTAIN."],
+    tape: "magpie",
   },
   station: {
     title: "RELAY STATION TESSERA", note: "Deep-space relay. Automated. Went dark the same week as the AURORA.",
@@ -79,7 +81,7 @@ const MAPS = {
       "#############",
       "#C..T...#..S#",
       "#.#####.#.#.#",
-      "#...S.#...#F#",
+      "#K..S.#...#F#",
       "###.#.#####.#",
       "#L..#...X...#",
       "#.#####.###.#",
@@ -87,6 +89,7 @@ const MAPS = {
       "#############",
     ],
     logs: ["TESSERA AUTO-LOG: RELAYING AURORA TRANSMISSION TO EARTH. CONTENT: A COUNT. 1. 2. 3. ... RELAY OVERLOADED AT 4,112."],
+    tape: "tessera",
     core: "DATA CORE RECOVERED. AURORA'S LAST POSITION: INSIDE THE VEIL, 3 SECTORS SPINWARD. SHE WASN'T LOST. SHE WENT THERE ON PURPOSE.",
   },
 };
@@ -114,5 +117,38 @@ const CREW = [
   "LIN: LIFE SUPPORT NEEDS ONE POINT OF POWER. JUST ONE. PLEASE.",
 ];
 
-return { ROOMS, BUILDABLE, START_LAYOUT, START, TUNE, SECTOR, MAPS, ENEMIES, ARRIVE, BEACON, CREW };
+/* ── Cassette tapes: found in wrecks, played in the TAPE DECK, read aloud by the ship's voice ── */
+const TAPES = {
+  hale: { label: "HALE · BEACON 7", lines: [
+    "THIS IS DIRECTOR HALE. RECORDING ON THE BEACON BECAUSE I DON'T TRUST THE RELAYS ANY MORE.",
+    "THE AURORA DIDN'T GO SILENT. SHE KEPT TRANSMITTING. A COUNT. ONE NUMBER EVERY NINE MINUTES.",
+    "EARTH CALLED IT INTERFERENCE AND STOPPED LISTENING. I DIDN'T.",
+    "IF YOU'RE HEARING THIS, MERIDIAN, THE COUNT IS STILL GOING. FIND OUT WHAT IT'S COUNTING TOWARD." ] },
+  magpie: { label: "MAGPIE · CAPT. ORR", lines: [
+    "CAPTAIN ORR, ORE HAULER MAGPIE. DAY FOUR HUNDRED AND SOMETHING.",
+    "THE CREW WANT TO FOLLOW THE SIGNAL. I SAID NO. WE HAUL ROCKS, WE DON'T CHASE GHOSTS.",
+    "THEY TOOK THE LIFEBOAT LAST NIGHT. ALL FIVE OF THEM. LEFT ME THE COFFEE.",
+    "IF THE SIGNAL IS A GHOST, IT'S A VERY PATIENT ONE. IT KNOWS OUR NAMES." ] },
+  tessera: { label: "TESSERA · RELAY AI", lines: [
+    "RELAY STATION TESSERA. AUTOMATED MAINTENANCE LOG. NO HUMAN ACCESS FOR ELEVEN YEARS.",
+    "INCOMING PACKET FROM AURORA. CONTENT: INTEGER SEQUENCE. INTENDED RECIPIENT: EARTH.",
+    "PACKET CONTAINS A SECOND LAYER. SECOND LAYER IS ADDRESSED TO THE NEXT SHIP THAT ASKS.",
+    "SECOND LAYER READS: YOU ARE LATE. WE SAVED YOU A SEAT. COME THROUGH THE VEIL." ] },
+};
+
+/* ── Incidents aboard: fires and hull breaches, handled from the SHIP screen ── */
+const INCIDENTS = {
+  fire:   { name: "FIRE",   fix: 4.5, spread: 14, hullEvery: 7, color: "#ff5a3c" },
+  breach: { name: "BREACH", fix: 5.5, o2: 2.6,   color: "#9fd8ff" },
+  ventO2: 14,          // air lost when you vent a room to space
+  hitChance: .5,       // chance a hull hit also starts a fire or breach
+};
+const CREW_ABOARD = [
+  { id: "ada",    tag: "A", name: "ADA",    home: "bridge",  fix: ["ADA: HANDLED. GET BACK TO WORK, CONTROL.", "ADA: DONE. THAT ONE WAS CLOSE."] },
+  { id: "wrench", tag: "W", name: "WRENCH", home: "engine",  fix: ["WRENCH: FIXED IT! WITH TAPE. DON'T ASK.", "WRENCH: SHE'S HAPPY AGAIN. ISH."] },
+  { id: "lin",    tag: "L", name: "LIN",    home: "life",    fix: ["LIN: CLEAR. NOBODY BURNED. THIS TIME.", "LIN: SEALED. EVERYONE DRINK WATER."] },
+  { id: "priya",  tag: "P", name: "PRIYA",  home: "reactor", fix: ["PRIYA: SORTED. THE SIGNAL GOT LOUDER WHILE I WORKED.", "PRIYA: FIXED. CAN WE GO NOW?"] },
+];
+
+return { ROOMS, BUILDABLE, START_LAYOUT, START, TUNE, SECTOR, MAPS, ENEMIES, ARRIVE, BEACON, CREW, TAPES, INCIDENTS, CREW_ABOARD };
 })();

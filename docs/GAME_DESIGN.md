@@ -4,6 +4,13 @@
 >
 > **Slice 1** (`index.html`, `console.js`, `data.js`): reactor knob + heat gauge + coolant lever + SCRAM; six power faders (engines, life, sensors, drone, shields, weapons) that only exist once their room is built, with brownouts when demand exceeds supply; 3×3 ship layout to build/strip rooms for scrap; NAV scope with 8-node Sector 1 (derelict, station, ice field, beacon, two hostiles, jump gate); DRONE CAM exploration of two hand-made derelicts (scrap, fuel, O₂, logs, fire, sentries you must SCAN to jam, a data core); RADAR battles where enemy shots take 2 s to arrive so you can shift power to shields; story via terminal logs. Earlier directions archived in `prototypes/`.
 
+**Slice 2 — "surprise me" additions (v0.5.1):**
+- **Living ship cutaway:** the SHIP screen is a phosphor side-view of the Meridian, three decks of three bays, with the four crew walking between rooms (ladder in the middle column).
+- **Incidents:** hull hits, ice strikes and an overheating core start **fires** (knock a room's system out, damage the hull, spread to neighbours) and **breaches** (vent O₂). Tap the room: **Send crew** (someone walks there and fixes it; breaches cost 1 scrap) or **Vent room** (instant, costs O₂, hurts anyone inside).
+- **Ship's voice:** a MOTHER-style speech-synthesis voice reads alerts and tapes aloud (VOICE switch).
+- **Cassette tapes & tape deck:** story told on tapes found in wrecks or dumped from the beacon; play/stop/eject with spinning reels.
+- **DEGAUSS button** (pure delight), CRT power-on flash, **dot-matrix printout** end screen on green-bar tractor-feed paper.
+
 # v0.4 (history)
 
 > **v0.4 (product owner): no 3D.** Chosen: **2D top-down + cockpit dash.** You look down on a painted Meridian flying up the screen through nebulae, rock fields, storm cells and wrecks; the instrument dash (hull/fuel/O₂ gauges, power routing, PATCH, BOOST) sits below. All v0.3 gameplay carries over unchanged (`legs.js` is shared). Rendering is plain 2D canvas with sprites painted in code, particles, parallax stars and a passing planet; on wide screens the play area is a centred phone-shaped lane. The 3D cockpit is archived in `prototypes/v3-cockpit-3d/`.

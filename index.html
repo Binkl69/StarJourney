@@ -31,7 +31,7 @@ button:disabled{cursor:not-allowed}
 :focus-visible{outline:2px dashed var(--yel);outline-offset:2px}
 
 /* ── The console shell ── */
-.console{max-width:1180px;margin:0 auto;display:grid;gap:8px;grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "mon" "term" "act" "read" "pow"}
+.console{max-width:1180px;margin:0 auto;display:grid;gap:8px;grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "mon" "term" "act" "read" "pow" "tape"}
 .bank{position:relative;background:
   repeating-linear-gradient(90deg,rgba(255,255,255,.012) 0 2px,rgba(0,0,0,.02) 2px 4px),
   linear-gradient(180deg,var(--plastic-hi),var(--plastic) 30%,var(--plastic-lo));
@@ -163,6 +163,40 @@ button:disabled{cursor:not-allowed}
 .term p.grn{color:var(--grn);text-shadow:0 0 6px var(--grn)}
 .cursor{display:inline-block;width:.55em;height:.9em;background:var(--amb);vertical-align:-2px;animation:blink 1s steps(2,jump-none) infinite}
 
+/* ── Tape deck ── */
+.a-tape{grid-area:tape;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.deck{display:flex;align-items:center;gap:10px;flex:1 1 260px}
+.cassette{position:relative;width:150px;height:92px;flex:none;border-radius:6px;background:linear-gradient(#1c1b18,#0e0d0b);border:2px solid #000;box-shadow:inset 0 0 0 3px #2c2a25}
+.cassette .label{position:absolute;left:10px;right:10px;top:8px;height:24px;background:linear-gradient(#efe6cc,#d7ccaf);border-radius:2px;font:15px/24px var(--f-crt);color:#2a2620;text-align:center;overflow:hidden;white-space:nowrap}
+.cassette .label::after{content:"";position:absolute;left:0;right:0;bottom:3px;height:3px;background:repeating-linear-gradient(90deg,#d9352b 0 12px,#e8b21c 12px 24px,#2f6fb5 24px 36px)}
+.cassette .win{position:absolute;left:28px;right:28px;bottom:12px;height:40px;border-radius:20px;background:#07120a;border:2px solid #000;display:flex;justify-content:space-between;align-items:center;padding:0 10px}
+.reel{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle,#eee 0 3px,#3a3731 4px 8px,#1b1a17 9px);border:2px dashed #8b8474}
+.deck.playing .reel{animation:spin 1.2s linear infinite}
+.deck.new .cassette{box-shadow:inset 0 0 0 3px #2c2a25,0 0 14px rgba(109,255,138,.6)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.deck-btns{display:flex;gap:6px}
+.deck-btns button{width:46px;height:42px;border-radius:4px;background:linear-gradient(#d9d1bb,#a39a84);border:1px solid #000;box-shadow:0 4px 0 #0b0a09,inset 0 1px 0 #fff;color:#2a2620;font:20px/1 var(--f-crt)}
+.deck-btns button:active{transform:translateY(3px);box-shadow:0 1px 0 #0b0a09}
+.deck .led{font-size:22px}
+.switches{display:flex;gap:12px;align-items:flex-end;margin-left:auto}
+.degauss{font:600 10px/1 var(--f-lbl);letter-spacing:.14em;padding:10px 10px 8px;border-radius:4px;background:linear-gradient(#5a564d,#35322c);border:1px solid #000;box-shadow:0 3px 0 #0b0a09;color:#ddd4bd}
+.degauss:active{transform:translateY(2px)}
+.crt.degauss{animation:degauss .9s ease-out}
+@keyframes degauss{0%{filter:hue-rotate(0) saturate(1);transform:none}10%{filter:hue-rotate(160deg) saturate(3) blur(1px);transform:scale(1.03) skewX(3deg)}30%{filter:hue-rotate(-120deg) saturate(2.5);transform:scale(.98) skewX(-2deg)}55%{filter:hue-rotate(60deg) saturate(1.6);transform:scale(1.01) skewX(1deg)}100%{filter:none;transform:none}}
+.crt.poweron canvas{animation:poweron .7s ease-out}
+@keyframes poweron{0%{transform:scaleY(.01) scaleX(.3);filter:brightness(4)}40%{transform:scaleY(.02) scaleX(1);filter:brightness(3)}100%{transform:none;filter:none}}
+.big.grey{background:linear-gradient(#5a564d,#35322c)}
+
+/* ── Dot-matrix printout ── */
+.paper{width:100%;max-width:560px;background:
+  radial-gradient(circle at 14px 50%,#141311 0 5px,transparent 6px) left top/28px 28px repeat-y,
+  radial-gradient(circle at calc(100% - 14px) 50%,#141311 0 5px,transparent 6px) right top/28px 28px repeat-y,
+  repeating-linear-gradient(#f4f1e6 0 28px,#e6efdc 28px 56px);
+  padding:22px 40px 26px;box-shadow:0 10px 30px rgba(0,0,0,.6);border-left:1px dashed #b8b2a0;border-right:1px dashed #b8b2a0;display:flex;flex-direction:column;gap:12px}
+.paper .feed{font:21px/28px var(--f-crt);color:#222;white-space:pre-wrap;letter-spacing:.04em}
+.paper .feed p{margin:0;animation:inkin .15s steps(3)}
+@keyframes inkin{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+
 /* ── Boot & end screens: a full-size CRT ── */
 .ov{position:fixed;inset:0;z-index:40;background:rgba(10,9,8,.86);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
 .ov .crt{aspect-ratio:auto;max-height:none;max-width:680px;padding:22px 22px 20px;display:flex;flex-direction:column;gap:12px;font:22px/1.2 var(--f-crt);color:var(--grn);text-shadow:0 0 6px var(--grn)}
@@ -174,7 +208,7 @@ button:disabled{cursor:not-allowed}
 .ov ul{margin:0;padding-left:20px}
 
 @media (min-width:980px){
-  .console{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);grid-template-areas:"top top" "mon read" "mon pow" "act term"}
+  .console{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);grid-template-areas:"top top" "mon read" "mon pow" "act term" "tape term"}
   .crt{max-height:none}
 }
 @media (max-width:420px){
@@ -191,7 +225,7 @@ button:disabled{cursor:not-allowed}
   <header class="bank a-top">
     <div class="brand">Meridian · Ship Control <small>MK II · 1984</small></div>
     <div class="lamps" aria-label="Warning lamps">
-      <span class="lamp" id="lOvl">OVERLOAD</span><span class="lamp" id="lHeat">HEAT</span><span class="lamp" id="lO2">O₂</span><span class="lamp" id="lHull">HULL</span><span class="lamp" id="lScram">SCRAM</span>
+      <span class="lamp" id="lOvl">OVERLOAD</span><span class="lamp" id="lHeat">HEAT</span><span class="lamp" id="lO2">O₂</span><span class="lamp" id="lHull">HULL</span><span class="lamp" id="lScram">SCRAM</span><span class="lamp" id="lFire">FIRE</span>
     </div>
   </header>
 
@@ -209,6 +243,7 @@ button:disabled{cursor:not-allowed}
       <button class="sel-btn" data-mode="drone" type="button">DRONE</button>
       <button class="sel-btn" data-mode="radar" type="button">RADAR</button>
     </div>
+    <div class="switches"><div class="toggle"><button class="lever on" id="voice" type="button" aria-pressed="true" aria-label="Ship's voice"></button><span class="plate">Voice</span></div><button class="degauss" id="degauss" type="button">DEGAUSS</button></div>
   </section>
 
   <section class="bank a-act" id="actions" aria-live="polite"></section>
@@ -237,6 +272,13 @@ button:disabled{cursor:not-allowed}
   </section>
 
   <section class="bank a-term"><div class="term" id="term" aria-live="polite"></div></section>
+
+  <section class="bank a-tape" aria-label="Tape deck">
+    <div class="deck">
+      <div class="cassette" aria-hidden="true"><div class="label" id="tapeLbl">NO TAPE</div><div class="win"><span class="reel"></span><span class="reel"></span></div></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><span class="plate">Tape deck</span><div class="deck-btns"><button type="button" id="tPlay" aria-label="Play tape">▶</button><button type="button" id="tStop" aria-label="Stop tape">■</button><button type="button" id="tNext" aria-label="Next tape">⏏</button></div><div class="led" id="tapeCount">0/3</div></div>
+    </div>
+  </section>
 </div>
 
 <div class="ov" id="ovBoot">
@@ -248,6 +290,8 @@ button:disabled{cursor:not-allowed}
       <li>TURN THE REACTOR UP FOR POWER. TOO HIGH AND IT OVERHEATS.</li>
       <li>SLIDE THE FADERS TO SHARE POWER BETWEEN SYSTEMS.</li>
       <li>BUILD ROOMS ON THE SHIP SCREEN. EXPLORE WRECKS WITH THE DRONE.</li>
+      <li>FIRES AND BREACHES SHOW ON THE SHIP SCREEN: SEND CREW OR VENT THE ROOM.</li>
+      <li>FIND CASSETTE TAPES IN WRECKS. PLAY THEM ON THE TAPE DECK.</li>
       <li>REACH THE JUMP GATE AT THE FAR SIDE OF THE SECTOR.</li>
     </ul>
     <button class="big grn go" id="powerOn" type="button">Power on</button>
