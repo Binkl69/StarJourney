@@ -1,6 +1,6 @@
 # StarJourney — Game Design (v0.1, draft)
 
-> Status: **Plan stage.** Brainstorm → **Plan** → Tasks → Build.
+> Status: **Plan approved → Tasks stage.** Brainstorm → **Plan** → Tasks → Build.
 > This doc is the single source of truth for what we're building. Change it before changing code.
 
 ---
@@ -110,12 +110,34 @@ Goal: *Is one run fun, and do I want to press "new run"?*
 | Runs too long for "one more go" | Target 20–30 min; tune waypoint count |
 | Dashboard looks great but is confusing | Introduce panels gradually over the first run |
 
-**Open questions for the product owner:**
-1. Tone: hopeful (*The Martian*), tense (*Alien*), or wry (*Hitchhiker's Guide*)?
-2. Can crew die permanently within a run? (I recommend yes — stakes make the arrival meaningful.)
-3. Destination and name of the ship — any ideas?
-4. Reference page: please add a screenshot or the HTML to `/reference` so we can match the look.
+**Decisions made:**
+- **Tone: mixed.** Rule of thumb: *the stakes are serious, the people are funny.* Space is cold and deadly (tense, like *Alien*); the crew are warm, stubborn and joke to cope (like *The Martian* / *Firefly*). Every event card should have at least one line of character, even in a crisis.
+- **Permadeath: yes.** Crew can die within a run. A death is permanent for that run; their name goes on a memorial wall in the logbook.
+- **Names (see §11).**
 
-## 10. Next step
+**Still open:**
+- Reference page: product owner will send it; we match the look before styling work starts.
 
-Once this doc is approved: break section 8 into a task list (small, playable increments), then build.
+## 10. Task list — prototype milestones
+
+Each milestone ends with something you can open and play/click.
+
+| # | Milestone | You can… |
+|---|---|---|
+| M1 | **Dashboard shell** — layout, panels, mission clock, fake live telemetry, styled to reference | See the look on desktop & phone |
+| M2 | **Run state + prepare screen** — pick 4 of 6 crew, cargo budget | Start a run with your chosen crew |
+| M3 | **Star map** — seeded branching map, travel costs fuel/time | Fly waypoint to waypoint |
+| M4 | **Event engine + first 10 cards** — conditions, choices, effects, story flags | Make story choices that change the ship/crew |
+| M5 | **Crew & ship consequences** — stress, injury, death, system damage | Lose someone. Feel it. |
+| M6 | **Crises (3 types)** — timed power-routing triage | Save (or fail to save) the ship under pressure |
+| M7 | **Arrival + 4 endings** — scoring who/when/how intact | Finish a full run |
+| M8 | **Legacy + remaining 10 cards** — logbook, memorial wall, 1 unlock, save in browser | Hit "new run" and want to |
+
+**Playtest gate after M7:** is one run fun? If not, fix the loop before adding content.
+
+## 11. Names
+
+- **Ship: ISV *Meridian*** — a meridian is a line you navigate by; also sounds like a ship people would trust with their lives. Crew call her "Merry" (the humour half of the tone).
+- **Destination: Halcyon** — a habitable moon. "Halcyon" means calm and peaceful, which is a quiet irony given the journey there.
+- **Mission control callsign: "Meridian Control"** — that's you.
+- **Starting crew roster (6):** Cmdr. Ada Okafor (pilot), Tomas "Wrench" Vey (engineer), Dr. Lin Sato (medic), Priya Raman (scientist), Jonah Kell (engineer, backup), Sol (ship AI assistant — not a crew slot yet, but a voice in the comms log).
