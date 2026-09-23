@@ -45,7 +45,7 @@ The destination is fixed. The **journey is the variable.** That's what makes it 
 - **Travel:** a star map with branching lanes (like *Slay the Spire*'s map). Each node shows a type icon: nebula, derelict, planet, anomaly, trade post, "unknown". Travel burns fuel and time.
 - **Event:** a card appears on the comms panel. You pick 2–4 responses. Outcomes change resources, crew stats/relationships, ship systems, and can set **story flags** that trigger later events.
 - **Crisis (sometimes):** a real-time-ish triage moment — e.g. hull breach: reroute power between life support, engines and shields before a timer runs out. This is the "Flight Director" feel.
-- **Arrival:** the ship reaches Kepler Station (placeholder name). The run is graded on:
+- **Arrival:** the ISV *Meridian* reaches **Halcyon**. The run is graded on:
   - **Who lands** (surviving crew, their state, their story arcs)
   - **Ship integrity** (hull, systems)
   - **When** (days elapsed — early, on time, late)
