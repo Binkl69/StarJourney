@@ -1,4 +1,21 @@
-# StarJourney — Game Design (v0.1, draft)
+# StarJourney — Game Design (v0.2)
+
+> **v0.2 direction change (agreed with product owner):** the v1 prototypes (mission-control dashboard; spreadsheet-style roguelite) missed the vision. They felt like spreadsheets, the story was thin, the player's role was wrong, and routes didn't feel different. **v2: "You're the Captain."** You're aboard the Meridian. A big viewport shows the journey; crew portraits react; resources shrink to a thin status strip. The spine is a mystery (the Aurora and Halcyon's signal), told across **three genuinely different routes** (The Veil, The Shallows, The Long Dark). Each route reveals one fragment of the truth, so the full picture takes several runs. First slice: **The Veil** (`index.html`, `story.js`, `engine.js`, `art.js`). The v1 prototypes live in `prototypes/v1-mission-control/`. Sections below that describe the dashboard-first design are kept for history.
+
+## v2 at a glance
+
+| | |
+|---|---|
+| **Role** | Captain aboard the Meridian. Mission Control (Director Hale) is a delayed, sometimes unwelcome voice from Earth. |
+| **Screen** | Viewport (painted in code: ships, nebulae, planets) · dialogue with portraits · crew trust · thin status strip. |
+| **Story** | Hand-written branching scenes (`story.js`). Each crew member has an arc; **trust** gates what they'll tell you and do for you. |
+| **Stakes** | Permadeath; crew can also *leave*. Endings vary by who lands, ship state, and what you learned. |
+| **Replay** | Three routes × a shared mystery. The Halcyon File (saved per browser) tracks fragments found. |
+| **Next** | Playtest The Veil → then write The Shallows (who sent the Meridian, and why) and The Long Dark (what's waiting on Halcyon). |
+
+---
+
+# v0.1 (history)
 
 > Status: **Plan approved → Tasks stage.** Brainstorm → **Plan** → Tasks → Build.
 > This doc is the single source of truth for what we're building. Change it before changing code.

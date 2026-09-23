@@ -1,7 +1,8 @@
 # StarJourney
 
-A mission-control roguelite: guide the ISV *Meridian* from Earth to Halcyon, one jump at a time. Every run takes a different route, tells a different story, and lands a different crew.
+You're Captain of the ISV *Meridian*, bound for Halcyon. Forty years ago the *Aurora* made the same trip and went silent. Three routes, one destination, one mystery.
 
-- **Play:** open `index.html` in a browser (no build step).
-- **Design:** [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md)
-- **Write a story card:** add it to `EVENTS` in `content.js`.
+- **Play:** open `index.html` in a browser (no build step). Route one, *The Veil*, is playable.
+- **Write story:** `story.js` (scenes, dialogue, choices, endings).
+- **Engine / art:** `engine.js` plays the story; `art.js` paints the viewport and portraits.
+- **Design:** [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) · earlier prototypes in `prototypes/`.
