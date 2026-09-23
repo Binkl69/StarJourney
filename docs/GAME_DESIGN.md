@@ -1,4 +1,10 @@
-# StarJourney — Game Design (v0.4)
+# StarJourney — Game Design (v0.5)
+
+> **v0.5 (product owner): "I'm the control panel."** Not piloting a ship. The player operates the Meridian's console: dials, faders and switches to balance power; builds and demolishes rooms; travels between places; explores abandoned wrecks and stations through a drone camera; fights on radar. **1980s look**, not modern: mixed green/amber phosphor CRTs in warm grey plastic hardware with beige label plates (Alien's Nostromo is the touchstone). Reference games: *Duskers* (console-only derelict exploration), *FTL* (rooms & power).
+>
+> **Slice 1** (`index.html`, `console.js`, `data.js`): reactor knob + heat gauge + coolant lever + SCRAM; six power faders (engines, life, sensors, drone, shields, weapons) that only exist once their room is built, with brownouts when demand exceeds supply; 3×3 ship layout to build/strip rooms for scrap; NAV scope with 8-node Sector 1 (derelict, station, ice field, beacon, two hostiles, jump gate); DRONE CAM exploration of two hand-made derelicts (scrap, fuel, O₂, logs, fire, sentries you must SCAN to jam, a data core); RADAR battles where enemy shots take 2 s to arrive so you can shift power to shields; story via terminal logs. Earlier directions archived in `prototypes/`.
+
+# v0.4 (history)
 
 > **v0.4 (product owner): no 3D.** Chosen: **2D top-down + cockpit dash.** You look down on a painted Meridian flying up the screen through nebulae, rock fields, storm cells and wrecks; the instrument dash (hull/fuel/O₂ gauges, power routing, PATCH, BOOST) sits below. All v0.3 gameplay carries over unchanged (`legs.js` is shared). Rendering is plain 2D canvas with sprites painted in code, particles, parallax stars and a passing planet; on wide screens the play area is a centred phone-shaped lane. The 3D cockpit is archived in `prototypes/v3-cockpit-3d/`.
 
