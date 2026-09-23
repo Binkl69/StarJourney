@@ -153,7 +153,7 @@ function hazards(dt) {
   if (inBelt !== S.inBelt) { S.inBelt = inBelt; if (inBelt) log(moving > 2 ? "ENTERING THE ICE BELT AT SPEED. THROTTLE DOWN OR RAISE SHIELDS." : "ENTERING THE ICE BELT.", moving > 2 ? "alert" : ""); }
   if (inVeil !== S.inVeil) { S.inVeil = inVeil; if (inVeil) log("INSIDE THE VEIL. SENSORS BLIND. LIGHTNING EVERYWHERE.", "alert"); }
   const shieldSave = Math.min(.85, S.eff.shd * .3);
-  if (inBelt && moving && Math.random() < .06 * moving * moving * dt) {
+  if (inBelt && moving && Math.random() < T.beltHits * moving * moving * dt) {
     if (Math.random() < shieldSave) { log("MICROMETEORITE. SHIELDS HELD.", "grn"); sfx("shield"); }
     else { S.hull -= 1; log("MICROMETEORITE STRIKE! HULL -1.", "alert"); sfx("hit"); shake(); if (Math.random() < .35) randomIncident("breach"); if (S.hull <= 0) return lose("hull"); }
   }
@@ -420,7 +420,7 @@ function ui() {
   lamp("#lFire", Object.keys(S.incidents).length > 0, true);
   tapeUI();
   document.querySelector('.sel-btn[data-mode="drone"]').classList.toggle("alert", !!S.explore && S.mode !== "drone");
-  $("#crtInfo").textContent = S.mode === "nav" ? `${SYS.name} · DAY ${Math.max(1, Math.round(S.time / 6))}` : S.mode === "drone" && S.explore ? `BAT ${Math.max(0, Math.round(S.explore.bat))}` : "";
+  $("#crtInfo").textContent = S.mode === "nav" ? `DAY ${Math.max(1, Math.round(S.time / 6))}` : S.mode === "drone" && S.explore ? `BAT ${Math.max(0, Math.round(S.explore.bat))}` : "";
 }
 let navKey = "";
 function navState() { return [S.at, !!S.travel, S.landing, S.sling ? (S.sling.done ? 2 : 1) : 0, !!S.scoop, S.at && S.done.has(S.at)].join("|"); }
@@ -631,7 +631,6 @@ function drawNav(t) {
   const pul = 1 + Math.sin(t * 2) * .08;
   g.fillStyle = AMB; g.shadowColor = AMB; g.shadowBlur = 24 * DPR; g.beginPath(); g.arc(cx, cy, 7 * DPR * pul, 0, TAU); g.fill();
   glowLine(AMB, 1); for (let i = 0; i < 8; i++) { const a = i / 8 * TAU + t * .2; g.beginPath(); g.moveTo(cx + Math.cos(a) * 11 * DPR, cy + Math.sin(a) * 11 * DPR); g.lineTo(cx + Math.cos(a) * 17 * DPR, cy + Math.sin(a) * 17 * DPR); g.stroke(); }
-  txt(SYS.star, cx, cy + 30 * DPR, AMB_D, 14);
   // Brann: the Veil and the slingshot zone
   const bp = toScr(bodyPos("brann"));
   glowLine("rgba(109,255,138,.35)", 1); g.beginPath();
@@ -651,7 +650,7 @@ function drawNav(t) {
     else if (b.type === "derelict" || b.type === "station") { g.rect(x - s, y - s, s * 2, s * 2); g.stroke(); if (done) { g.beginPath(); g.moveTo(x - s, y + s); g.lineTo(x + s, y - s); g.stroke(); } }
     else if (b.type === "beacon") { g.moveTo(x, y - s); g.lineTo(x + s, y + s); g.lineTo(x - s, y + s); g.closePath(); g.stroke(); if (!done && (t * 2 | 0) % 2) { g.beginPath(); g.arc(x, y, s * 2.2, 0, TAU); g.stroke(); } }
     else { g.rect(x - s * .6, y - s * .6, s * 1.2, s * 1.2); g.stroke(); }
-    if (known) txt(b.name, x, y + ((b.size || 0) * R + 18 * DPR), col, 14);
+    if (known) { g.font = `${14 * DPR}px VT323, monospace`; const hw = g.measureText(b.name).width / 2 + 4 * DPR; txt(b.name, clamp(x, hw, W - hw), y + ((b.size || 0) * R + 18 * DPR), col, 14); }
     if (b.id === S.target) { glowLine(GRN, 1.5); const q = (14 + (b.size || 0) * R / DPR) * DPR + Math.sin(t * 6) * 2 * DPR; [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([dx, dy]) => { g.beginPath(); g.moveTo(x + dx * q, y + dy * q * .6); g.lineTo(x + dx * q, y + dy * q); g.lineTo(x + dx * q * .6, y + dy * q); g.stroke(); }); }
   });
   // our trail and plotted course

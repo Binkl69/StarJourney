@@ -1,5 +1,5 @@
 /* StarJourney — DATA
-   Everything that isn't rules: rooms you can build, the sector map, derelicts to explore,
+   Everything that isn't rules: rooms you can build, the star system, derelicts to explore,
    hostile ships, terminal messages and logs. Tune the game here, not in console.js. */
 window.DATA = (() => {
 
@@ -9,7 +9,7 @@ window.DATA = (() => {
 const ROOMS = {
   bridge:  { name: "BRIDGE",       short: "BRG", fixed: true, desc: "You are here. Everything runs through this panel." },
   reactor: { name: "REACTOR",      short: "RCT", fixed: true, desc: "Makes the power. Push it too hard and it cooks." },
-  engine:  { name: "ENGINES",      short: "ENG", fixed: true, sys: "eng", desc: "Charges the jump drive. More power, faster charge." },
+  engine:  { name: "ENGINES",      short: "ENG", fixed: true, sys: "eng", desc: "Main drive. The ENG fader is your throttle: more power, faster and thirstier." },
   life:    { name: "LIFE SUPPORT", short: "LIF", fixed: true, sys: "life", desc: "Keeps the air breathable. Needs at least 1 power." },
   sensor:  { name: "SENSOR ARRAY", short: "SNS", sys: "sens", cost: 4, desc: "Reveals the map and lets the drone scan further." },
   drone:   { name: "DRONE BAY",    short: "DRN", sys: "drone", cost: 5, desc: "Launches a drone to explore wrecks. Power = drone battery." },
@@ -29,8 +29,9 @@ const TUNE = {
   heatPerPoint: 2.2,      // heat/sec per point above safe
   coolantShift: 2,        // coolant raises the safe point by this (×2 with coolant loop)
   speedPerEng: .012,      // map units/sec per ENG power point (the ENG fader is the throttle)
-  fuelPerEng2: .12,       // fuel/sec = this × ENG² — pushing harder costs more per kilometre
-  drift: .003,            // speed with engines at zero
+  fuelPerEng2: .06,       // fuel/sec = this × ENG² — pushing harder costs more per kilometre
+  drift: .004,            // speed when the tanks are dry
+  beltHits: .015,         // micrometeorite chance/sec = this × ENG²: crawl through the belt and you're safe
   slingBoost: 2, slingTime: 12,        // slingshot: speed ×2, no fuel, for 12 s
   brakeFuel: 12,                        // fuel for a braking burn into orbit at Halcyon
   scoopFuel: 22, scoopHeat: 30,         // skimming Brann's clouds for fuel
